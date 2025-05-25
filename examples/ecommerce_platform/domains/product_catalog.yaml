@@ -1,0 +1,56 @@
+domain: product_catalog
+  description: Manages products, variants, and inventory
+
+data_model:
+  consistency_requirements:
+    - name: Inventory accuracy
+      requirement: Inventory counts must be eventually consistent within 1 second
+      rationale: Prevent overselling while allowing high throughput
+
+    - name: Price consistency
+      requirement: Price changes must be immediately consistent
+      rationale: Legal requirement - advertised price must be honored
+
+scenarios:
+  - name: Create product with variants
+    given: I am authenticated as a tenant admin
+    when: I create a product "T-Shirt" with variants for size [S,M,L] and color [Red,Blue]
+    then:
+      - 6 variant SKUs should be created
+      - Each variant should have independent inventory tracking
+      - Product should be searchable within 5 seconds
+
+  - name: Bulk import products
+    given: I have a CSV with 50,000 products
+    when: I upload the CSV for import
+    then:
+      - Import should be processed asynchronously
+      - I should receive progress updates via websocket
+      - 95% of products should be searchable within 2 minutes
+      - Failed imports should generate detailed error report
+
+  - name: Concurrent inventory updates
+    given: Product "SKU-123" has inventory count of 10
+    when: 15 simultaneous orders try to purchase 1 unit each
+    then:
+      - Exactly 10 orders should succeed
+      - 5 orders should fail with "insufficient inventory"
+      - No negative inventory should be possible
+      - Inventory reserved but not purchased should release after 15 minutes
+
+constraints:
+  performance:
+    - name: Product detail page
+      requirement: p99 < 50ms including all variant data
+      cache_strategy: Tenant-specific Redis cache with 5-minute TTL
+
+    - name: Search latency
+      requirement: p95 < 100ms for searches across 1M products
+      implementation_hint: ElasticSearch with tenant-specific indices
+
+  resilience:
+    - name: Search degradation
+      requirement: If search is unavailable, browse by category still works
+
+    - name: Image CDN failure
+      requirement: Products display with placeholder images if CDN fails

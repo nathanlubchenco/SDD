@@ -1,0 +1,39 @@
+interaction: checkout_flow
+  description: Complete purchase flow across multiple domains
+
+participants:
+  - shopping_cart
+  - pricing_engine
+  - payment_gateway
+  - inventory
+  - order_processing
+  - notification_service
+
+flow:
+  - name: Complete purchase
+    steps:
+      1: Cart requests final pricing from pricing_engine
+      2: Payment_gateway reserves payment authorization
+      3: Inventory reserves items
+      4: Order_processing creates order
+      5: Payment_gateway captures payment
+      6: Inventory confirms reservation
+      7: Notification_service sends confirmation
+
+    failure_handling:
+      - name: Payment fails after inventory reserved
+        rollback: Release inventory reservation within 30 seconds
+
+      - name: Inventory unavailable after payment authorized
+        rollback: Void payment authorization
+        compensation: Offer backorder or refund option
+
+constraints:
+  - name: Atomicity
+    requirement: Either complete entire flow or rollback cleanly
+
+  - name: Idempotency
+    requirement: Submitting same order twice results in single order
+
+  - name: Distributed timeout
+    requirement: Entire flow completes or fails within 30 seconds

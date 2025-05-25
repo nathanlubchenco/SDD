@@ -1,0 +1,1 @@
+# Domain specifications for ecommerce_platform example
