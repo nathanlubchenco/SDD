@@ -1,5 +1,7 @@
 # Specification-Driven Development (SDD)
 
+*Status*: **Complete Vaporware**
+
 ## What is this?
 
 A revolutionary approach to building software where:
@@ -65,18 +67,3 @@ This is an active research project exploring the future of software development.
 - 🚧 Orchestration layer for end-to-end workflows
 - 🚧 Production monitoring and auto-remediation
 - 🚧 Real-world examples and case studies
-
-## Contributing
-We welcome contributions! Key areas:
-
-- Additional MCP server implementations
-- Example projects in different domains
-- Constraint verification strategies
-- Debugging without code access patterns
-
-## Learn More
-
-- Architecture Overview
-- Philosophy and Principles
-- Complete Examples
-- Original Blog Post
