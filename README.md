@@ -1,5 +1,7 @@
 # Specification-Driven Development (SDD)
 
+Status: *Complete Vaporware*
+
 ## What is this?
 
 A revolutionary approach to building software where:
@@ -39,10 +41,10 @@ The system automatically:
 
 ## How to Get Started
 
-Define your scenarios - What should your system do?
-Set constraints - How fast? How secure? How scalable?
-Review and approve - AI suggests edge cases you might have missed
-Deploy - The system generates, tests, and deploys everything
++ Define your scenarios - What should your system do?
++ Set constraints - How fast? How secure? How scalable?
++ Review and approve - AI suggests edge cases you might have missed
++ Deploy - The system generates, tests, and deploys everything
 
 ## Key Concepts
 ### Scenarios
@@ -56,7 +58,7 @@ Monitor and debug what the system does, not how it does it.
 ## Project Status
 This is an active research project exploring the future of software development. We're building:
 
-🚧 Core MCP servers for specification and implementation
-🚧 Orchestration layer for end-to-end workflows
-🚧 Production monitoring and auto-remediation
-🚧 Real-world examples and case studies
++ 🚧 Core MCP servers for specification and implementation
++ 🚧 Orchestration layer for end-to-end workflows
++ 🚧 Production monitoring and auto-remediation
++ 🚧 Real-world examples and case studies
