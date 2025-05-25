@@ -29,7 +29,6 @@
   - tests/integration/
 - **Setup and Tooling**
   - docker-compose.yml
-  - requirements.txt
 - **Pre-commit and CI**
   - Review pre-commit configuration, CI scripts (if any)
 
@@ -61,3 +60,9 @@ Task 7: find any remaining glue work necessary to make this all work and try to 
 - **Description:** Updated docker-compose.yml to use Python 3.11-slim image for a more up-to-date interpreter.
 - **Files Updated:**
   - docker-compose.yml
+
+### Entry 4: Basic OpenAI LLM provider integration
+- **Date:** 2025-05-25 10:11:12
+- **Description:** Added core/openai_client.py; provides simple OpenAI ChatCompletion and Completion wrappers reading OPENAI_API_KEY from the environment.
+- **Files Updated:**
+  - core/openai_client.py
