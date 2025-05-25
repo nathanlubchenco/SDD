@@ -1,3 +1,6 @@
+<!--
+DO NOT RENAME OR DELETE THIS FILE
+-->
 # Specification-Driven Development (SDD) Project Context
 
 ## Project Overview
@@ -51,6 +54,7 @@ This project implements a revolutionary approach to software development where h
    - Complex distributed systems
 
 ## Key Files Structure
+```
 sdd-project/
 ├── PROJECT_CONTEXT.md          # This file
 ├── README.md                   # Human-readable overview
@@ -59,22 +63,14 @@ sdd-project/
 │   ├── PHILOSOPHY.md           # Core concepts and principles
 │   └── EXAMPLES.md             # Complete examples
 ├── mcp_servers/
-│   ├── specification_server.py # Spec management
-│   ├── implementation_server.py # Code generation
-│   ├── monitoring_server.py    # Production monitoring
-│   └── debugger_server.py      # Behavior debugging
 ├── orchestrator/
-│   ├── sdd_orchestrator.py     # Main orchestration
-│   └── handoff_flow.py         # Spec-to-impl flow
 ├── core/
-│   ├── scenario_validator.py   # Scenario validation
-│   ├── constraint_verifier.py  # Constraint checking
-│   └── degradation_hunter.py   # Predictive monitoring
 ├── examples/
 │   ├── task_manager/           # Simple example
 │   └── ecommerce_platform/     # Complex example
 └── tests/
-└── integration/            # System tests
+    └── integration/            # System tests
+```
 
 ## Critical Implementation Notes
 
