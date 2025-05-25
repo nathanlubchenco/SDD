@@ -70,3 +70,54 @@ This is an active research project exploring the future of software development.
 - 🚧 Orchestration layer for end-to-end workflows
 - 🚧 Production monitoring and auto-remediation
 - 🚧 Real-world examples and case studies
+
+## Development Environment Setup
+
+### Prerequisites
+
+- **Python 3.11+** (tested on 3.11-slim via Docker)
+- **pip**
+- **docker & docker-compose** (optional, for containerized development)
+
+### Local Setup
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Using Docker
+
+Alternatively, you can work inside a Docker container without installing dependencies locally:
+
+```bash
+docker-compose up -d
+docker-compose exec python bash
+# inside the container:
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+To run commands directly without entering the shell:
+
+```bash
+docker-compose run --rm python pytest
+```
+
+## Running Tests
+
+This project uses pytest for unit and integration testing.
+
+To run the spec-to-code pipeline integration test:
+
+```bash
+pytest tests/integration/test_spec_to_code_pipeline.py
+```
+
+To execute the full test suite:
+
+```bash
+pytest
+```

@@ -66,3 +66,22 @@ Task 7: find any remaining glue work necessary to make this all work and try to 
 - **Description:** Added core/openai_client.py; provides simple OpenAI ChatCompletion and Completion wrappers reading OPENAI_API_KEY from the environment.
 - **Files Updated:**
   - core/openai_client.py
+
+### Entry 5: Scaffold spec-to-code generation test
+- **Date:** 2025-05-25 10:30:00
+- **Description:** Added an integration test under tests/integration to verify that a specification can be driven through the spec-to-code pipeline and that generated code passes its own tests. Stubbed out the handoff_flow entry point.
+- **Files Updated:**
+  - orchestrator/handoff_flow.py
+  - tests/integration/test_spec_to_code_pipeline.py
+
+### Entry 6: Document test execution steps in README.md
+- **Date:** 2025-05-25 10:46:00
+- **Description:** Added a "Running Tests" section to README.md with commands to run the spec-to-code integration test and the full pytest suite.
+- **Files Updated:**
+  - README.md
+
+### Entry 7: Add development environment setup instructions to README.md
+- **Date:** 2025-05-25 11:15:00
+- **Description:** Added a "Development Environment Setup" section to README.md with instructions for local and Docker-based setup.
+- **Files Updated:**
+  - README.md
