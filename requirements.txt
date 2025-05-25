@@ -1,25 +1,5 @@
-# Core dependencies
-pydantic>=2.0.0
-fastapi>=0.100.0
+# Minimal development requirements
+openai>=1.0.0
+pyyaml>=6.0
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
-pyyaml>=6.0
-
-# MCP and AI
-mcp>=0.1.0  # Model Context Protocol
-anthropic>=0.25.0
-openai>=1.0.0
-
-# Infrastructure
-docker>=6.0.0
-redis>=4.5.0
-asyncio>=3.4.3
-
-# Monitoring
-prometheus-client>=0.16.0
-grafana-api>=1.0.0
-
-# Development
-black>=23.0.0
-ruff>=0.1.0
-mypy>=1.0.0

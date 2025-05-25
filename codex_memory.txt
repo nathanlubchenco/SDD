@@ -1,0 +1,63 @@
+# Codex Memory
+
+## WIP Log
+
+### Entry 1: Initial project exploration and task identification
+- **Date:** 2025-05-25 09:43:30
+- **Description:** Initial exploration of the SDD project structure and identification of potential areas for incremental work.
+
+#### Potential Work Areas
+- **Documentation Review**
+  - PROJECT_CONTEXT.md, README.md (root)
+  - docs/ARCHITECTURE.md, docs/PHILOSOPHY.md, docs/EXAMPLES.md
+- **Example Projects**
+  - examples/task_manager
+  - examples/ecommerce_platform
+- **MCP Servers**
+  - mcp_servers/specification_server.py
+  - mcp_servers/implementation_server.py
+  - mcp_servers/monitoring_server.py
+  - mcp_servers/debugger_server.py
+- **Orchestrator**
+  - orchestrator/sdd_orchestrator.py
+  - orchestrator/handoff_flow.py
+- **Core Modules**
+  - core/scenario_validator.py
+  - core/constraint_verifier.py
+  - core/degradation_hunter.py
+- **Integration Tests**
+  - tests/integration/
+- **Setup and Tooling**
+  - docker-compose.yml
+  - requirements.txt
+- **Pre-commit and CI**
+  - Review pre-commit configuration, CI scripts (if any)
+
+---
+
+*Next Steps:* Review and prioritize these work areas for the first development iterations.
+
++ The primary initial milestone is to get a working prototype that end to end illustrates the proof of concept.
+
+Proposed tasks ordering:
+
+Task 1: Get a minimal working development environment so focus on setup and tooling.  The existing requirement.txt and docker-compose.yml were highly speculative and illustrative, simplify them as appropriate.
+Task 2: Provide the basic functionality to actually call an LLM provider. Let's focus on OpenAI first and rely on a locally exported OPENAI_API_KEY for credentials. Make sure to use the latest version of the api.
+Task 3: Let's set up a test that will let us know if things are working.  Given some specification, if we generate the code for it, can that code pass traditional unit tests that we have set up for it.
+Task 4: work on the first spec to code generation orchestration handoff layer
+Task 5: work on actual prompt generation
+Task 6: work on MCP server implimentation
+Task 7: find any remaining glue work necessary to make this all work and try to get the test passing
+
+### Entry 2: Simplify setup and tooling for minimal dev environment
+- **Date:** 2025-05-25 09:58:27
+- **Description:** Reduced requirements.txt and docker-compose.yml to core dependencies and minimal service for Python-based development.
+- **Files Updated:**
+  - requirements.txt
+  - docker-compose.yml
+
+### Entry 3: Bump Python version in docker-compose.yml
+- **Date:** 2025-05-25 10:00:34
+- **Description:** Updated docker-compose.yml to use Python 3.11-slim image for a more up-to-date interpreter.
+- **Files Updated:**
+  - docker-compose.yml
