@@ -1,5 +1,9 @@
+import sys
 import subprocess
 from pathlib import Path
+
+# Ensure project root is on sys.path for imports
+sys.path.insert(0, str(Path(__file__).parents[2]))
 
 import pytest
 
@@ -13,7 +17,8 @@ def test_spec_to_code_pipeline(tmp_path):
     Given a sample specification, invoke the handoff flow and verify that
     generated code compiles and passes its own unit tests.
     """
-    spec_path = Path(__file__).parents[1] / "examples" / "task_manager" / "specification.yaml"
+    # Path to the sample specification in the examples directory
+    spec_path = Path(__file__).parents[2] / "examples" / "task_manager" / "specification.yaml"
     output_dir = tmp_path / "generated"
     # Execute the pipeline (expected to raise NotImplementedError for now)
     with pytest.raises(NotImplementedError):

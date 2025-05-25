@@ -85,3 +85,9 @@ Task 7: find any remaining glue work necessary to make this all work and try to 
 - **Description:** Added a "Development Environment Setup" section to README.md with instructions for local and Docker-based setup.
 - **Files Updated:**
   - README.md
+
+### Entry 8: Fix integration test import and path resolution
+- **Date:** 2025-05-25 11:40:00
+- **Description:** Adjusted test to insert the project root into sys.path for proper module imports and corrected the spec_path to reference the examples directory and locate the specification file.
+- **Files Updated:**
+  - tests/integration/test_spec_to_code_pipeline.py
