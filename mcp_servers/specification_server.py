@@ -3,16 +3,15 @@ import asyncio
 from typing import Dict, List, Optional
 from pathlib import Path
 import yaml
-from mcp.server import MCPServer, Tool, Resource
-from mcp.types import TextContent, ImageContent
 
 
-class SpecificationMCPServer(MCPServer):
+class SpecificationMCPServer:
     """MCP Server for managing system specifications"""
 
     def __init__(self, spec_directory: Path):
-        super().__init__("specification-server")
+        self.name = "specification-server"
         self.spec_dir = spec_directory
+        self.spec_dir.mkdir(parents=True, exist_ok=True)
         self.specs = self._load_specifications()
         self.scenario_cache = {}
 
@@ -25,15 +24,6 @@ class SpecificationMCPServer(MCPServer):
                 specs[domain] = yaml.safe_load(f)
         return specs
 
-    @Tool(
-        name="get_scenarios",
-        description="Retrieve scenarios for a specific domain or feature",
-        parameters={
-            "domain": {"type": "string", "description": "Domain name (e.g., 'checkout', 'inventory')"},
-            "feature": {"type": "string", "description": "Optional specific feature", "required": False},
-            "include_constraints": {"type": "boolean", "description": "Include related constraints", "default": True}
-        }
-    )
     async def get_scenarios(self, domain: str, feature: Optional[str] = None,
                             include_constraints: bool = True) -> Dict:
         """Retrieve scenarios with full context"""
@@ -61,16 +51,6 @@ class SpecificationMCPServer(MCPServer):
 
         return result
 
-    @Tool(
-        name="validate_scenario",
-        description="Validate a new scenario against existing specifications",
-        parameters={
-            "scenario": {"type": "object", "description": "Scenario to validate"},
-            "domain": {"type": "string", "description": "Target domain"},
-            "check_conflicts": {"type": "boolean", "default": True},
-            "check_completeness": {"type": "boolean", "default": True}
-        }
-    )
     async def validate_scenario(self, scenario: Dict, domain: str,
                                 check_conflicts: bool = True,
                                 check_completeness: bool = True) -> Dict:
@@ -121,15 +101,6 @@ class SpecificationMCPServer(MCPServer):
         
         return conflicts
 
-    @Tool(
-        name="generate_test_suite",
-        description="Generate test suite from scenarios",
-        parameters={
-            "domain": {"type": "string", "description": "Domain to generate tests for"},
-            "language": {"type": "string", "description": "Programming language", "default": "python"},
-            "framework": {"type": "string", "description": "Test framework", "default": "pytest"}
-        }
-    )
     async def generate_test_suite(self, domain: str, language: str = "python",
                                  framework: str = "pytest") -> Dict:
         """Generate executable tests from scenarios"""
@@ -152,14 +123,6 @@ class SpecificationMCPServer(MCPServer):
             "test_count": len(scenarios["scenarios"])
         }
 
-    @Tool(
-        name="analyze_coverage",
-        description="Analyze scenario coverage for edge cases",
-        parameters={
-            "domain": {"type": "string", "description": "Domain to analyze"},
-            "suggest_missing": {"type": "boolean", "description": "Suggest missing scenarios", "default": True}
-        }
-    )
     async def analyze_coverage(self, domain: str, suggest_missing: bool = True) -> Dict:
         """Analyze test coverage and suggest missing scenarios"""
 
@@ -183,10 +146,6 @@ class SpecificationMCPServer(MCPServer):
 
         return analysis
 
-    @Resource(
-        name="scenario_templates",
-        description="Templates for common scenario patterns"
-    )
     async def get_scenario_templates(self) -> List[Dict]:
         """Provide scenario templates"""
         return [
@@ -239,3 +198,109 @@ class TestGeneratedScenarios:
 """
 
         return code
+    
+    def _scenarios_conflict(self, scenario1: Dict, scenario2: Dict) -> bool:
+        """Check if two scenarios have conflicting behaviors"""
+        # Simple heuristic: same 'when' action but different 'then' outcomes
+        when1 = scenario1.get('when', '').lower()
+        when2 = scenario2.get('when', '').lower()
+        
+        if when1 == when2:
+            then1 = str(scenario1.get('then', [])).lower()
+            then2 = str(scenario2.get('then', [])).lower()
+            return then1 != then2
+        
+        return False
+    
+    def _explain_conflict(self, scenario1: Dict, scenario2: Dict) -> str:
+        """Explain why two scenarios conflict"""
+        return f"Same action '{scenario1.get('when')}' produces different outcomes"
+    
+    async def _check_completeness(self, scenario: Dict, domain: str) -> Dict:
+        """Check scenario completeness"""
+        warnings = []
+        suggestions = []
+        
+        if not scenario.get('given'):
+            warnings.append("No 'given' conditions specified")
+            suggestions.append("Add preconditions to make the scenario more specific")
+        
+        if not scenario.get('then'):
+            warnings.append("No 'then' outcomes specified")
+            suggestions.append("Add expected outcomes to verify behavior")
+        
+        return {"warnings": warnings, "suggestions": suggestions}
+    
+    def _analyze_coverage_gaps(self, scenarios: List[Dict]) -> Dict:
+        """Analyze coverage gaps in scenarios"""
+        operations = set()
+        error_cases = 0
+        
+        for scenario in scenarios:
+            when_text = scenario.get('when', '').lower()
+            if 'create' in when_text:
+                operations.add('create')
+            elif 'update' in when_text or 'modify' in when_text:
+                operations.add('update')
+            elif 'delete' in when_text:
+                operations.add('delete')
+            elif 'read' in when_text or 'get' in when_text or 'list' in when_text:
+                operations.add('read')
+            
+            then_text = str(scenario.get('then', [])).lower()
+            if 'error' in then_text:
+                error_cases += 1
+        
+        return {
+            "crud_operations_covered": list(operations),
+            "error_scenarios": error_cases,
+            "coverage_percentage": min(100, (len(operations) * 25))  # Basic CRUD = 100%
+        }
+    
+    async def _suggest_missing_scenarios(self, scenarios: List[Dict], domain: str) -> List[Dict]:
+        """Suggest missing scenarios based on coverage analysis"""
+        analysis = self._analyze_coverage_gaps(scenarios)
+        suggestions = []
+        
+        crud_ops = ['create', 'read', 'update', 'delete']
+        covered = analysis['crud_operations_covered']
+        
+        for op in crud_ops:
+            if op not in covered:
+                suggestions.append({
+                    "name": f"{op.title()} operation scenario",
+                    "reason": f"No {op} scenarios detected",
+                    "template": {
+                        "when": f"User performs {op} operation",
+                        "then": [f"Operation {op} succeeds"]
+                    }
+                })
+        
+        if analysis['error_scenarios'] == 0:
+            suggestions.append({
+                "name": "Error handling scenarios",
+                "reason": "No error scenarios detected", 
+                "template": {
+                    "when": "Invalid input provided",
+                    "then": ["Appropriate error message returned"]
+                }
+            })
+        
+        return suggestions
+    
+    def _generate_given_code(self, given: Optional[str]) -> str:
+        """Generate setup code from given condition"""
+        if not given:
+            return "# Setup initial state"
+        return f"# Setup: {given}"
+    
+    def _generate_when_code(self, when: str) -> str:
+        """Generate action code from when condition"""
+        return f"api_client.action('{when}')"
+    
+    def _generate_then_code(self, then: List[str]) -> str:
+        """Generate assertion code from then conditions"""
+        assertions = []
+        for condition in then:
+            assertions.append(f"assert {condition.replace(' ', '_').lower()}")
+        return '\n        '.join(assertions)
