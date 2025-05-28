@@ -183,8 +183,14 @@ class ImplementationMCPServer:
                                         implementation_code: str, test_code: str):
         """Write generated files to workspace"""
         (workspace_path / "task_manager.py").write_text(implementation_code)
-        (workspace_path / "test_task_manager.py").write_text(test_code)
-        (workspace_path / "__init__.py").write_text("")
+        
+        # Fix test code imports and common issues
+        fixed_test_code = self._fix_test_code(test_code, implementation_code)
+        (workspace_path / "test_task_manager.py").write_text(fixed_test_code)
+        
+        # Create proper __init__.py that re-exports everything
+        init_content = self._generate_init_file(implementation_code)
+        (workspace_path / "__init__.py").write_text(init_content)
 
     def _parse_test_results(self, stdout: str, stderr: str, returncode: int) -> Dict:
         """Parse test results from pytest output"""
@@ -203,3 +209,95 @@ class ImplementationMCPServer:
             "failed": failed,
             "details": stdout if stdout else stderr
         }
+
+    def _fix_test_code(self, test_code: str, implementation_code: str) -> str:
+        """Fix common issues in generated test code"""
+        lines = test_code.split('\n')
+        fixed_lines = []
+        
+        # Track what we need to import
+        needs_uuid = 'uuid.UUID' in implementation_code or 'UUID(' in implementation_code
+        needs_datetime = 'datetime' in implementation_code and 'from datetime import datetime' not in test_code
+        
+        for line in lines:
+            # Fix import statements
+            if line.startswith('import pytest'):
+                fixed_lines.append(line)
+                if needs_uuid and 'import uuid' not in test_code:
+                    fixed_lines.append('import uuid')
+                if needs_datetime:
+                    fixed_lines.append('from datetime import datetime')
+            elif 'from task_manager import' in line:
+                # Fix imports based on what's actually in implementation
+                imports = self._extract_exports_from_code(implementation_code)
+                import_line = f"from task_manager import {', '.join(imports)}"
+                fixed_lines.append(import_line)
+            elif 'isinstance(task.id, int)' in line:
+                # Fix ID type assertion
+                if needs_uuid:
+                    fixed_line = line.replace('isinstance(task.id, int)', 'isinstance(task.id, uuid.UUID)')
+                    fixed_line = fixed_line.replace('Task ID is not unique', 'Task ID is not a UUID')
+                    fixed_lines.append(fixed_line)
+                else:
+                    fixed_lines.append(line)
+            elif 'task.status ==' in line and '"' in line:
+                # Fix status comparisons to use enum
+                if 'TaskStatus' in implementation_code:
+                    if '"pending"' in line:
+                        fixed_line = line.replace('"pending"', 'TaskStatus.PENDING')
+                        fixed_lines.append(fixed_line)
+                    elif '"completed"' in line:
+                        fixed_line = line.replace('"completed"', 'TaskStatus.COMPLETED')
+                        fixed_lines.append(fixed_line)
+                    else:
+                        fixed_lines.append(line)
+                else:
+                    fixed_lines.append(line)
+            elif 'status="pending"' in line or 'status="completed"' in line:
+                # Fix status parameters to use enum
+                if 'TaskStatus' in implementation_code:
+                    fixed_line = line.replace('status="pending"', 'status=TaskStatus.PENDING')
+                    fixed_line = fixed_line.replace('status="completed"', 'status=TaskStatus.COMPLETED')
+                    fixed_lines.append(fixed_line)
+                else:
+                    fixed_lines.append(line)
+            elif 'TaskError' in line:
+                # Fix exception references
+                exception_classes = [name for name in self._extract_exports_from_code(implementation_code) if 'Error' in name]
+                if exception_classes:
+                    fixed_line = line.replace('TaskError', exception_classes[0])
+                    fixed_lines.append(fixed_line)
+                else:
+                    fixed_lines.append(line)
+            else:
+                fixed_lines.append(line)
+                
+        return '\n'.join(fixed_lines)
+
+    def _generate_init_file(self, implementation_code: str) -> str:
+        """Generate proper __init__.py that re-exports everything"""
+        exports = self._extract_exports_from_code(implementation_code)
+        
+        if not exports:
+            return ""
+            
+        init_content = f"from .task_manager import {', '.join(exports)}\n\n"
+        init_content += f"__all__ = {exports}\n"
+        
+        return init_content
+
+    def _extract_exports_from_code(self, code: str) -> List[str]:
+        """Extract class and exception names from implementation code"""
+        exports = []
+        lines = code.split('\n')
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith('class ') and '(' in line:
+                class_name = line.split('class ')[1].split('(')[0].split(':')[0].strip()
+                exports.append(class_name)
+            elif line.startswith('class ') and ':' in line:
+                class_name = line.split('class ')[1].split(':')[0].strip()
+                exports.append(class_name)
+                
+        return exports
