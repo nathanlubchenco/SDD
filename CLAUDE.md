@@ -1,0 +1,91 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Specification-Driven Development (SDD) is a research project exploring AI-powered software development where humans define behaviors in plain English and AI generates, optimizes, and maintains the implementation.
+
+**Status**: Complete Vaporware (research/prototype phase)
+
+## Common Commands
+
+### Development Setup
+```bash
+# Local Python setup
+python -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+
+# Docker alternative
+docker-compose up -d
+docker-compose exec python bash
+```
+
+### Testing
+```bash
+# Run specific integration test
+pytest tests/integration/test_spec_to_code_pipeline.py
+
+# Run all tests
+pytest
+
+# Via Docker
+docker-compose run --rm python pytest
+```
+
+## Architecture
+
+### Core Components
+- **core/**: Core SDD functionality (constraint verification, performance optimization, scenario validation)
+- **mcp_servers/**: MCP (Model Context Protocol) servers - specialized AI agents for different aspects:
+  - `specification_server.py`: Manages scenarios and constraints
+  - `implementation_server.py`: Handles code generation and testing
+  - `monitoring_server.py`: Production monitoring and auto-remediation
+  - `debugger_server.py`: Behavior-focused debugging
+- **orchestrator/**: Coordinates the end-to-end SDD workflow from specification to deployment
+- **examples/**: Real-world examples showing SDD specifications (task_manager, ecommerce_platform)
+
+### Specification Format
+SDD uses YAML-based specifications with two key components:
+
+1. **Scenarios**: Given/When/Then behavior descriptions
+2. **Constraints**: Non-functional requirements (performance, security, scalability, reliability)
+
+Example:
+```yaml
+scenario: Process payment
+  given: Customer has items in cart totaling $100
+  when: Customer submits valid credit card
+  then: 
+    - Payment is processed within 5 seconds
+    - Order confirmation is sent
+    - Inventory is updated
+
+constraints:
+  performance:
+    - name: API response time
+      requirement: p95 latency < 100ms for all read operations
+```
+
+### Implementation Flow
+1. Human writes scenarios → AI generates edge cases → Human reviews/approves
+2. AI generates implementation → Tests → Constraint verification
+3. If constraints fail → AI optimizes → Repeat verification
+4. Deploy → Continuous monitoring → Auto-remediation
+
+## Key Philosophy
+- **Behavior-First**: Everything defined in terms of observable behavior, not code
+- **Constraint-Driven**: Non-functional requirements are first-class citizens  
+- **Human-in-the-Loop**: Humans approve behaviors, AI handles implementation details
+- **Self-Healing**: Systems detect and fix their own degradation
+
+## Dependencies
+- Python 3.11+
+- OpenAI API (configured via OPENAI_API_KEY environment variable)
+- pytest for testing
+- PyYAML for specification parsing
+
+## Other AI Agents
+Sometimes you cooperate with codex-cli.  Codex context can be found in codex.md or codex_memory.txt.  You can also write notes and research to yourself in claude_memory.txt.

@@ -1,6 +1,7 @@
 # Task Management System Specification
 
-feature: Task Management System
+feature: 
+  name: Task Management System
   description: A system for creating, updating, and tracking tasks
 
 constraints:
