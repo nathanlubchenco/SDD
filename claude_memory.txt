@@ -169,6 +169,23 @@ workspaces/[project_name]/
   - Add integration testing across services
 - **Benefits**: Support for microservice architectures, complex system generation
 
+#### **Priority 5: Interactive Specification Discovery & UI**
+- **Goal**: Replace manual YAML writing with guided, conversational specification discovery
+- **Vision**: Humans shouldn't write specs - they should discover them through dialogue
+- **Tasks**:
+  - Build conversational AI system for specification elicitation (based on prompt_scratchpad.txt)
+  - Create progressive discovery flow: Dream → First Scenario → Reality Check → Edge Cases → System Emerges
+  - Develop web UI for interactive specification building with visual system mapping
+  - Implement real-time YAML generation from conversation
+  - Add capability to visualize emerging system architecture during discovery
+  - Support adaptive conversation strategies based on user type (overwhelmed, vague, detailed, frustrated)
+- **Key Features**:
+  - Progressive depth layers: Happy Path → Real World → Scale → Polish
+  - Gamified edge case discovery and constraint elicitation
+  - Visual system building with user journey mapping
+  - Export to multiple formats (YAML, diagrams, documentation)
+- **Benefits**: Dramatically lower barrier to entry, better specifications through guided discovery, makes SDD accessible to non-technical users
+
 ### 💡 **Key Insights from This Session**
 
 1. **Caching Transforms Performance**: 99.9% improvement shows caching is essential for production use
