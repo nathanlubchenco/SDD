@@ -14,14 +14,22 @@ class SDDOrchestrator:
         self.impl_server = ImplementationMCPServer(Path("./workspaces"))
         self.monitor_server = MonitoringMCPServer()
 
-    async def implement_feature(self, feature_request: str) -> Dict:
+    async def implement_feature(self, feature_request: str, domain: str = None) -> Dict:
         """Complete feature implementation flow"""
 
         print(f"🚀 Starting implementation for: {feature_request}")
 
+        # Derive domain from feature_request if not provided
+        if not domain:
+            # Convert feature request to a valid domain name (snake_case)
+            import re
+            domain = re.sub(r'[^a-zA-Z0-9]+', '_', feature_request).lower().strip('_')
+            if not domain or domain[0].isdigit():
+                domain = f"service_{domain}"
+
         # Phase 1: Load or create specification
-        print("📝 Phase 1: Loading specification...")
-        spec_result = await self._load_specification("task_manager")
+        print(f"📝 Phase 1: Loading specification for domain: {domain}...")
+        spec_result = await self._load_specification(domain)
 
         # Phase 2: Implementation
         print("🔨 Phase 2: Generating implementation...")

@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  app:
+    environment:
+    - DEBUG=true
+    - LOG_LEVEL=DEBUG
+    command:
+    - python
+    - -m
+    - pytest
+    - -v
+  database:
+    environment:
+    - POSTGRES_DB=test_db
+    - POSTGRES_USER=test_user
+    - POSTGRES_PASSWORD=test_password

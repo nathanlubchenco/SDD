@@ -1,0 +1,28 @@
+version: '3.8'
+networks:
+  sdd-network:
+    driver: bridge
+services:
+  e-commerce-order-management:
+    build: .
+    ports:
+    - 8000:8000
+    environment:
+    - JWT_SECRET_KEY=${JWT_SECRET_KEY:-default_value}
+    - SECRET_KEY=${SECRET_KEY:-default_value}
+    depends_on: []
+    volumes:
+    - ./:/app
+    restart: unless-stopped
+    networks:
+    - sdd-network
+    healthcheck: null
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+    - 9090:9090
+    volumes:
+    - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    restart: unless-stopped
+    networks:
+    - sdd-network

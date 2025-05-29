@@ -34,6 +34,9 @@ def handoff_flow(spec_path: Path, output_dir: Path, max_retries: int = 3):
         # Validate specification structure
         _validate_specification(spec)
         
+        # Generate appropriate file names based on feature
+        filenames = _generate_filenames(spec)
+        
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -52,15 +55,43 @@ def handoff_flow(spec_path: Path, output_dir: Path, max_retries: int = 3):
         )
         
         # Write generated files with error handling
-        _write_files_safely(output_dir, implementation_code, test_code)
+        _write_files_safely(output_dir, implementation_code, test_code, filenames)
         
-        logger.info(f"Successfully generated code in {output_dir}")
+        # Generate Docker configuration
+        docker_files = _generate_docker_configuration(
+            implementation_code, test_code, spec, output_dir, filenames
+        )
+        
+        logger.info(f"Successfully generated code and Docker configuration in {output_dir}")
         
     except Exception as e:
         logger.error(f"Handoff flow failed: {str(e)}")
         # Clean up partial files on failure
-        _cleanup_on_failure(output_dir)
+        _cleanup_on_failure(output_dir, filenames)
         raise
+
+def _generate_filenames(spec: dict) -> dict:
+    """Generate appropriate filenames based on the feature specification."""
+    import re
+    
+    feature = spec.get('feature', {})
+    if isinstance(feature, dict):
+        feature_name = feature.get('name', 'service')
+    else:
+        feature_name = str(feature) if feature else 'service'
+    
+    # Convert feature name to snake_case for Python files
+    snake_case_name = re.sub(r'[^a-zA-Z0-9]+', '_', feature_name).lower().strip('_')
+    
+    # Ensure it's a valid Python module name
+    if not snake_case_name or snake_case_name[0].isdigit():
+        snake_case_name = f"service_{snake_case_name}"
+    
+    return {
+        'implementation': f"{snake_case_name}.py",
+        'test': f"test_{snake_case_name}.py",
+        'module_name': snake_case_name
+    }
 
 def generate_implementation(spec):
     """Generate Python implementation code from specification with caching."""
@@ -160,7 +191,7 @@ SCENARIOS TO TEST:
 {format_scenarios_for_test_prompt(scenarios)}
 
 TEST REQUIREMENTS:
-1. Import all necessary classes from task_manager module
+1. Import all necessary classes from the generated module
 2. Create one test function per scenario with descriptive names
 3. Use pytest fixtures for common setup (TaskManager instances, etc.)
 4. Test ALL 'then' conditions with specific assertions
@@ -575,7 +606,7 @@ def _generate_with_retry(generate_func, operation_type: str, max_retries: int):
     
     raise RuntimeError(f"Failed to generate {operation_type} after {max_retries} attempts")
 
-def _write_files_safely(output_dir: Path, implementation_code: str, test_code: str):
+def _write_files_safely(output_dir: Path, implementation_code: str, test_code: str, filenames: dict):
     """Write generated files with atomic operations and validation."""
     import tempfile
     import shutil
@@ -594,9 +625,9 @@ def _write_files_safely(output_dir: Path, implementation_code: str, test_code: s
         _validate_python_syntax(tmp_impl_path)
         _validate_python_syntax(tmp_test_path)
         
-        # If validation passes, move to final location
-        shutil.move(tmp_impl_path, output_dir / "task_manager.py")
-        shutil.move(tmp_test_path, output_dir / "test_task_manager.py")
+        # If validation passes, move to final location with proper names
+        shutil.move(tmp_impl_path, output_dir / filenames['implementation'])
+        shutil.move(tmp_test_path, output_dir / filenames['test'])
         
         # Create __init__.py
         (output_dir / "__init__.py").write_text("")
@@ -619,11 +650,731 @@ def _validate_python_syntax(file_path: str):
     except SyntaxError as e:
         raise ValueError(f"Generated Python code has syntax errors: {str(e)}")
 
-def _cleanup_on_failure(output_dir: Path):
+def _cleanup_on_failure(output_dir: Path, filenames: dict = None):
     """Clean up any partially created files on failure."""
     try:
         if output_dir.exists():
-            for file in ["task_manager.py", "test_task_manager.py", "__init__.py"]:
+            cleanup_files = ["__init__.py", "Dockerfile", "docker-compose.yml", "requirements.txt", 
+                           ".dockerignore", ".env.development", ".env.production", ".env.testing",
+                           "docker-compose.override.yml", "docker-compose.prod.yml", "docker-compose.test.yml",
+                           "DEPLOYMENT.md"]
+            
+            if filenames:
+                cleanup_files.extend([filenames['implementation'], filenames['test']])
+            else:
+                # Fallback: cleanup any Python files (except __init__.py)
+                for py_file in output_dir.glob("*.py"):
+                    if py_file.name != "__init__.py":
+                        cleanup_files.append(py_file.name)
+                
+            for file in cleanup_files:
                 (output_dir / file).unlink(missing_ok=True)
     except Exception:
         pass  # Best effort cleanup
+
+# Docker configuration generation functions
+def _generate_docker_configuration(implementation_code: str, test_code: str, spec: dict, output_dir: Path, filenames: dict) -> dict:
+    """Generate Docker configuration files based on code analysis and constraints."""
+    
+    # Analyze code for dependencies and runtime requirements
+    analysis = _analyze_code_for_docker(implementation_code, test_code, spec)
+    
+    # Generate Dockerfile
+    dockerfile_content = _generate_dockerfile(analysis, filenames)
+    
+    # Generate docker-compose.yml
+    compose_content = _generate_docker_compose(analysis, spec, filenames)
+    
+    # Generate requirements.txt based on detected dependencies
+    requirements_content = _generate_requirements_txt(analysis)
+    
+    # Generate .dockerignore
+    dockerignore_content = _generate_dockerignore()
+    
+    # Generate environment files
+    env_files = _generate_environment_files(analysis, spec)
+    
+    # Write Docker files
+    docker_files = {
+        'Dockerfile': dockerfile_content,
+        'docker-compose.yml': compose_content,
+        'requirements.txt': requirements_content,
+        '.dockerignore': dockerignore_content,
+        **env_files
+    }
+    
+    for filename, content in docker_files.items():
+        (output_dir / filename).write_text(content)
+    
+    return docker_files
+
+def _analyze_code_for_docker(implementation_code: str, test_code: str, spec: dict) -> dict:
+    """Analyze generated code to determine Docker requirements."""
+    import re
+    
+    analysis = {
+        'python_version': '3.11',
+        'dependencies': set(),
+        'has_web_server': False,
+        'has_database': False,
+        'has_async': False,
+        'has_jwt_auth': False,
+        'has_monitoring': False,
+        'ports': [],
+        'environment_vars': set(),
+        'volumes': [],
+        'health_check_endpoint': None
+    }
+    
+    combined_code = implementation_code + test_code
+    
+    # Detect dependencies from imports
+    import_patterns = [
+        (r'from fastapi import|import fastapi', 'fastapi', True, [8000]),
+        (r'from flask import|import flask', 'flask', True, [5000]),
+        (r'from django import|import django', 'django', True, [8000]),
+        (r'import jwt|from jwt import', 'PyJWT', False, []),
+        (r'import asyncio|async def', 'asyncio', False, []),
+        (r'import redis|from redis import', 'redis', False, []),
+        (r'import psycopg2|from psycopg2 import', 'psycopg2-binary', False, []),
+        (r'import pymongo|from pymongo import', 'pymongo', False, []),
+        (r'from sqlalchemy import|import sqlalchemy', 'sqlalchemy', False, []),
+        (r'from pydantic import|import pydantic', 'pydantic', False, []),
+        (r'import celery|from celery import', 'celery', False, []),
+        (r'from prometheus_client import|import prometheus_client', 'prometheus-client', False, []),
+        (r'import logging', 'built-in', False, []),
+    ]
+    
+    for pattern, dependency, is_web_server, default_ports in import_patterns:
+        if re.search(pattern, combined_code, re.IGNORECASE):
+            if dependency != 'built-in':
+                analysis['dependencies'].add(dependency)
+            if is_web_server:
+                analysis['has_web_server'] = True
+                analysis['ports'].extend(default_ports)
+    
+    # Detect async usage
+    if re.search(r'async def|await ', combined_code):
+        analysis['has_async'] = True
+    
+    # Detect JWT authentication
+    if re.search(r'jwt\.|JWT|token', combined_code, re.IGNORECASE):
+        analysis['has_jwt_auth'] = True
+        analysis['environment_vars'].add('JWT_SECRET_KEY')
+    
+    # Detect database usage
+    if any(db_pattern in combined_code.lower() for db_pattern in ['database', 'db', 'postgres', 'mongo', 'redis']):
+        analysis['has_database'] = True
+        analysis['environment_vars'].add('DATABASE_URL')
+    
+    # Detect monitoring/health endpoints
+    if re.search(r'/health|/status|/metrics', combined_code):
+        analysis['has_monitoring'] = True
+        analysis['health_check_endpoint'] = '/health'
+    
+    # Analyze constraints for additional requirements
+    constraints = spec.get('constraints', {})
+    
+    # Performance constraints might need monitoring
+    if constraints.get('performance'):
+        analysis['dependencies'].add('prometheus-client')
+        analysis['has_monitoring'] = True
+    
+    # Security constraints
+    if constraints.get('security'):
+        analysis['environment_vars'].update(['SECRET_KEY', 'JWT_SECRET_KEY'])
+    
+    # Add common testing dependencies
+    analysis['dependencies'].update(['pytest', 'pytest-asyncio'])
+    
+    return analysis
+
+def _generate_dockerfile(analysis: dict, filenames: dict) -> str:
+    """Generate Dockerfile content based on code analysis."""
+    
+    dockerfile_lines = [
+        f"# Auto-generated Dockerfile for SDD project",
+        f"FROM python:{analysis['python_version']}-slim",
+        "",
+        "# Set working directory",
+        "WORKDIR /app",
+        "",
+        "# Install system dependencies",
+        "RUN apt-get update && apt-get install -y \\",
+        "    gcc \\",
+        "    && rm -rf /var/lib/apt/lists/*",
+        "",
+        "# Copy requirements and install Python dependencies",
+        "COPY requirements.txt .",
+        "RUN pip install --no-cache-dir --upgrade pip",
+        "RUN pip install --no-cache-dir -r requirements.txt",
+        "",
+        "# Copy application code",
+        "COPY . .",
+        "",
+    ]
+    
+    # Add curl for health checks and general utility
+    dockerfile_lines[7] = "RUN apt-get update && apt-get install -y \\"
+    dockerfile_lines[8] = "    gcc \\"
+    dockerfile_lines.insert(9, "    curl \\")
+    dockerfile_lines[10] = "    && rm -rf /var/lib/apt/lists/*"
+    
+    # Add health check if available
+    if analysis['health_check_endpoint']:
+        dockerfile_lines.extend([
+            "# Health check",
+            f"HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\",
+            f"    CMD curl -f http://localhost:{analysis['ports'][0] if analysis['ports'] else 8000}{analysis['health_check_endpoint']} || exit 1",
+            "",
+        ])
+    elif analysis['has_web_server']:
+        # Default health check for web servers
+        dockerfile_lines.extend([
+            "# Default health check for web server",
+            f"HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \\",
+            f"    CMD curl -f http://localhost:{analysis['ports'][0] if analysis['ports'] else 8000}/ || exit 1",
+            "",
+        ])
+    
+    # Expose ports
+    if analysis['ports']:
+        for port in analysis['ports']:
+            dockerfile_lines.append(f"EXPOSE {port}")
+        dockerfile_lines.append("")
+    
+    # Add non-root user for security
+    dockerfile_lines.extend([
+        "# Create non-root user",
+        "RUN groupadd -r appuser && useradd -r -g appuser appuser",
+        "RUN chown -R appuser:appuser /app",
+        "USER appuser",
+        "",
+    ])
+    
+    # Set default command based on web server detection
+    module_name = filenames['module_name']
+    if analysis['has_web_server']:
+        if 'fastapi' in analysis['dependencies']:
+            dockerfile_lines.append(f'CMD ["uvicorn", "{module_name}:app", "--host", "0.0.0.0", "--port", "8000"]')
+        elif 'flask' in analysis['dependencies']:
+            dockerfile_lines.append('CMD ["python", "-m", "flask", "run", "--host=0.0.0.0"]')
+        elif 'django' in analysis['dependencies']:
+            dockerfile_lines.append('CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]')
+        else:
+            dockerfile_lines.append(f'CMD ["python", "{filenames["implementation"]}"]')
+    else:
+        dockerfile_lines.append(f'CMD ["python", "{filenames["implementation"]}"]')
+    
+    return '\n'.join(dockerfile_lines)
+
+def _generate_docker_compose(analysis: dict, spec: dict, filenames: dict) -> str:
+    """Generate docker-compose.yml content with enhanced networking and volumes."""
+    
+    service_name = spec.get('feature', {}).get('name', 'sdd-service').lower().replace(' ', '-')
+    
+    compose_content = {
+        'version': '3.8',
+        'networks': {
+            'sdd-network': {
+                'driver': 'bridge'
+            }
+        },
+        'services': {
+            service_name: {
+                'build': '.',
+                'ports': [f"{port}:{port}" for port in analysis['ports']] if analysis['ports'] else ["8000:8000"],
+                'environment': [],
+                'depends_on': [],
+                'volumes': ['./:/app'] if not analysis['has_web_server'] else [],
+                'restart': 'unless-stopped',
+                'networks': ['sdd-network'],
+                'healthcheck': {
+                    'test': ['CMD', 'curl', '-f', f"http://localhost:{analysis['ports'][0] if analysis['ports'] else 8000}/health"],
+                    'interval': '30s',
+                    'timeout': '3s',
+                    'start_period': '5s',
+                    'retries': 3
+                } if analysis['has_web_server'] else None
+            }
+        }
+    }
+    
+    # Add environment variables
+    env_vars = []
+    for env_var in analysis['environment_vars']:
+        env_vars.append(f"{env_var}=${{{env_var}:-default_value}}")
+    
+    if env_vars:
+        compose_content['services'][service_name]['environment'] = env_vars
+    
+    # Add database service if needed
+    if analysis['has_database']:
+        compose_content['services']['database'] = {
+            'image': 'postgres:15-alpine',
+            'environment': [
+                'POSTGRES_DB=sdd_db',
+                'POSTGRES_USER=sdd_user',
+                'POSTGRES_PASSWORD=sdd_password'
+            ],
+            'ports': ['5432:5432'],
+            'volumes': ['postgres_data:/var/lib/postgresql/data'],
+            'restart': 'unless-stopped',
+            'networks': ['sdd-network'],
+            'healthcheck': {
+                'test': ['CMD-SHELL', 'pg_isready -U sdd_user -d sdd_db'],
+                'interval': '10s',
+                'timeout': '5s',
+                'retries': 5
+            }
+        }
+        compose_content['services'][service_name]['depends_on'].append('database')
+        compose_content['services'][service_name]['environment'].append('DATABASE_URL=postgresql://sdd_user:sdd_password@database:5432/sdd_db')
+    
+    # Add Redis if detected
+    if 'redis' in analysis['dependencies']:
+        compose_content['services']['redis'] = {
+            'image': 'redis:7-alpine',
+            'ports': ['6379:6379'],
+            'restart': 'unless-stopped',
+            'networks': ['sdd-network'],
+            'healthcheck': {
+                'test': ['CMD', 'redis-cli', 'ping'],
+                'interval': '10s',
+                'timeout': '3s',
+                'retries': 3
+            }
+        }
+        compose_content['services'][service_name]['depends_on'].append('redis')
+        compose_content['services'][service_name]['environment'].append('REDIS_URL=redis://redis:6379')
+    
+    # Add monitoring if needed
+    if analysis['has_monitoring']:
+        compose_content['services']['prometheus'] = {
+            'image': 'prom/prometheus:latest',
+            'ports': ['9090:9090'],
+            'volumes': ['./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml'],
+            'restart': 'unless-stopped',
+            'networks': ['sdd-network']
+        }
+    
+    # Add volumes section if needed
+    if analysis['has_database']:
+        compose_content['volumes'] = {'postgres_data': {}}
+    
+    # Convert to YAML format
+    import yaml
+    return yaml.dump(compose_content, default_flow_style=False, sort_keys=False)
+
+def _generate_requirements_txt(analysis: dict) -> str:
+    """Generate requirements.txt based on detected dependencies."""
+    
+    # Base requirements mapping with versions
+    dependency_versions = {
+        'fastapi': 'fastapi>=0.104.0',
+        'uvicorn': 'uvicorn[standard]>=0.24.0',
+        'flask': 'flask>=3.0.0',
+        'django': 'django>=4.2.0',
+        'PyJWT': 'PyJWT>=2.8.0',
+        'redis': 'redis>=5.0.0',
+        'psycopg2-binary': 'psycopg2-binary>=2.9.0',
+        'pymongo': 'pymongo>=4.6.0',
+        'sqlalchemy': 'sqlalchemy>=2.0.0',
+        'pydantic': 'pydantic>=2.5.0',
+        'celery': 'celery>=5.3.0',
+        'prometheus-client': 'prometheus-client>=0.19.0',
+        'pytest': 'pytest>=7.4.0',
+        'pytest-asyncio': 'pytest-asyncio>=0.21.0',
+    }
+    
+    requirements = []
+    
+    # Add detected dependencies
+    for dep in sorted(analysis['dependencies']):
+        if dep in dependency_versions:
+            requirements.append(dependency_versions[dep])
+        else:
+            requirements.append(dep)
+    
+    # Add FastAPI dependencies if FastAPI is detected
+    if 'fastapi' in analysis['dependencies']:
+        requirements.append('uvicorn[standard]>=0.24.0')
+    
+    # Add async dependencies if async is detected
+    if analysis['has_async']:
+        requirements.append('aiofiles>=23.2.0')
+    
+    return '\n'.join(requirements)
+
+def _generate_dockerignore() -> str:
+    """Generate .dockerignore content."""
+    
+    dockerignore_content = """# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+"""
+    
+    return dockerignore_content
+
+def _generate_environment_files(analysis: dict, spec: dict) -> dict:
+    """Generate environment configuration files for different deployment scenarios."""
+    
+    # Generate base environment variables
+    base_env_vars = {}
+    
+    for env_var in analysis['environment_vars']:
+        if env_var == 'JWT_SECRET_KEY':
+            base_env_vars[env_var] = 'your-super-secret-jwt-key-change-in-production'
+        elif env_var == 'SECRET_KEY':
+            base_env_vars[env_var] = 'your-secret-key-change-in-production'
+        elif env_var == 'DATABASE_URL':
+            base_env_vars[env_var] = 'postgresql://sdd_user:sdd_password@database:5432/sdd_db'
+        else:
+            base_env_vars[env_var] = f'your-{env_var.lower().replace("_", "-")}-here'
+    
+    # Add common environment variables
+    base_env_vars.update({
+        'ENVIRONMENT': 'development',
+        'LOG_LEVEL': 'INFO',
+        'DEBUG': 'false'
+    })
+    
+    # Generate different environment files
+    env_files = {}
+    
+    # Development environment
+    dev_env = base_env_vars.copy()
+    dev_env.update({
+        'ENVIRONMENT': 'development',
+        'DEBUG': 'true',
+        'LOG_LEVEL': 'DEBUG'
+    })
+    
+    # Production environment
+    prod_env = base_env_vars.copy()
+    prod_env.update({
+        'ENVIRONMENT': 'production',
+        'DEBUG': 'false',
+        'LOG_LEVEL': 'INFO'
+    })
+    
+    # Testing environment  
+    test_env = base_env_vars.copy()
+    test_env.update({
+        'ENVIRONMENT': 'testing',
+        'DEBUG': 'true',
+        'LOG_LEVEL': 'DEBUG',
+        'DATABASE_URL': 'postgresql://test_user:test_password@database:5432/test_db'
+    })
+    
+    # Convert to .env file format
+    def dict_to_env_file(env_dict):
+        lines = ['# Auto-generated environment configuration']
+        for key, value in sorted(env_dict.items()):
+            lines.append(f'{key}={value}')
+        return '\n'.join(lines)
+    
+    env_files['.env.development'] = dict_to_env_file(dev_env)
+    env_files['.env.production'] = dict_to_env_file(prod_env)
+    env_files['.env.testing'] = dict_to_env_file(test_env)
+    
+    # Generate docker-compose override files
+    env_files['docker-compose.override.yml'] = _generate_compose_override('development', spec)
+    env_files['docker-compose.prod.yml'] = _generate_compose_override('production', spec)
+    env_files['docker-compose.test.yml'] = _generate_compose_override('testing', spec)
+    
+    # Generate deployment README
+    env_files['DEPLOYMENT.md'] = _generate_deployment_readme(analysis, spec)
+    
+    return env_files
+
+def _generate_compose_override(environment: str, spec: dict) -> str:
+    """Generate docker-compose override files for different environments."""
+    
+    # Generate appropriate module name
+    filenames = _generate_filenames(spec)
+    module_name = filenames['module_name']
+    
+    if environment == 'development':
+        override_content = {
+            'version': '3.8',
+            'services': {
+                'app': {
+                    'volumes': ['./:/app'],
+                    'environment': [
+                        'DEBUG=true',
+                        'LOG_LEVEL=DEBUG'
+                    ],
+                    'command': ['uvicorn', f'{module_name}:app', '--host', '0.0.0.0', '--port', '8000', '--reload']
+                }
+            }
+        }
+    elif environment == 'production':
+        override_content = {
+            'version': '3.8',
+            'services': {
+                'app': {
+                    'environment': [
+                        'DEBUG=false',
+                        'LOG_LEVEL=INFO'
+                    ],
+                    'deploy': {
+                        'replicas': 2,
+                        'resources': {
+                            'limits': {
+                                'cpus': '1',
+                                'memory': '1G'
+                            },
+                            'reservations': {
+                                'cpus': '0.5',
+                                'memory': '512M'
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    else:  # testing
+        override_content = {
+            'version': '3.8',
+            'services': {
+                'app': {
+                    'environment': [
+                        'DEBUG=true',
+                        'LOG_LEVEL=DEBUG'
+                    ],
+                    'command': ['python', '-m', 'pytest', '-v']
+                },
+                'database': {
+                    'environment': [
+                        'POSTGRES_DB=test_db',
+                        'POSTGRES_USER=test_user',
+                        'POSTGRES_PASSWORD=test_password'
+                    ]
+                }
+            }
+        }
+    
+    import yaml
+    return yaml.dump(override_content, default_flow_style=False, sort_keys=False)
+
+def _generate_deployment_readme(analysis: dict, spec: dict) -> str:
+    """Generate deployment documentation."""
+    
+    service_name = spec.get('feature', {}).get('name', 'SDD Service')
+    
+    readme_content = f"""# {service_name} - Deployment Guide
+
+This guide covers deploying your {service_name} using Docker and docker-compose.
+
+## Quick Start
+
+### Development
+```bash
+# Start development environment with hot reload
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+# Or use the shortcut (override.yml is loaded by default)
+docker-compose up
+```
+
+### Production
+```bash
+# Start production environment
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### Testing
+```bash
+# Run tests in containerized environment
+docker-compose -f docker-compose.yml -f docker-compose.test.yml up --abort-on-container-exit
+```
+
+## Environment Configuration
+
+The application supports three environments:
+
+- **Development** (`.env.development`): Debug enabled, hot reload, verbose logging
+- **Production** (`.env.production`): Optimized for performance and security
+- **Testing** (`.env.testing`): Configured for automated testing
+
+## Services
+
+### Application
+- **Port**: {analysis['ports'][0] if analysis['ports'] else 8000}
+- **Health Check**: Available at `/health` endpoint
+- **Networks**: Connected to `sdd-network`
+
+"""
+
+    if analysis['has_database']:
+        readme_content += """### Database (PostgreSQL)
+- **Port**: 5432
+- **Database**: sdd_db
+- **Default Credentials**: sdd_user/sdd_password (change in production!)
+- **Health Check**: pg_isready command
+- **Persistence**: Data stored in `postgres_data` volume
+
+"""
+
+    if 'redis' in analysis['dependencies']:
+        readme_content += """### Redis Cache
+- **Port**: 6379  
+- **Health Check**: Redis ping command
+- **Use**: Caching and session storage
+
+"""
+
+    if analysis['has_monitoring']:
+        readme_content += """### Monitoring (Prometheus)
+- **Port**: 9090
+- **Metrics**: Application metrics collected automatically
+- **Dashboard**: Access Prometheus UI at http://localhost:9090
+
+"""
+
+    readme_content += """## Security Considerations
+
+1. **Change default passwords** in production environment
+2. **Set strong JWT secrets** in environment variables
+3. **Use HTTPS** in production (configure reverse proxy)
+4. **Review exposed ports** and limit access as needed
+5. **Regular security updates** for base images
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+"""
+
+    for env_var in sorted(analysis['environment_vars']):
+        description = {
+            'JWT_SECRET_KEY': 'Secret key for JWT token signing',
+            'SECRET_KEY': 'General application secret key',
+            'DATABASE_URL': 'PostgreSQL connection string',
+        }.get(env_var, f'Configuration for {env_var}')
+        
+        readme_content += f"| `{env_var}` | {description} | See .env files |\n"
+
+    readme_content += """
+## Scaling
+
+For production scaling:
+
+```bash
+# Scale application instances
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --scale app=3
+
+# Or use Docker Swarm for production orchestration
+docker stack deploy -c docker-compose.yml -c docker-compose.prod.yml myapp
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Port conflicts**: Change port mappings in docker-compose.yml
+2. **Database connection issues**: Ensure database service is healthy
+3. **Permission issues**: Check file ownership for volumes
+
+### Logs
+
+```bash
+# View application logs
+docker-compose logs app
+
+# Follow logs in real-time
+docker-compose logs -f app
+
+# View all service logs
+docker-compose logs
+```
+
+### Health Checks
+
+All services include health checks. Check status with:
+
+```bash
+docker-compose ps
+```
+
+## Generated Files
+
+This deployment was auto-generated by SDD (Specification-Driven Development) based on your requirements and detected dependencies.
+
+- `Dockerfile`: Optimized Python container
+- `docker-compose.yml`: Multi-service orchestration
+- `requirements.txt`: Python dependencies
+- `.env.*`: Environment-specific configurations
+- Override files: Environment-specific docker-compose configurations
+
+For more information about SDD, visit the project documentation.
+"""
+
+    return readme_content

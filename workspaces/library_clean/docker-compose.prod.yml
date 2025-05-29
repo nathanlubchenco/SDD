@@ -1,0 +1,15 @@
+version: '3.8'
+services:
+  app:
+    environment:
+    - DEBUG=false
+    - LOG_LEVEL=INFO
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M

@@ -48,16 +48,18 @@ class ImplementationMCPServer:
             return {"error": "Workspace not found"}
 
         # Generate different components using our existing handoff_flow
-        from orchestrator.handoff_flow import generate_implementation, generate_tests
+        from orchestrator.handoff_flow import generate_implementation, generate_tests, _generate_filenames
         
         implementation_code = generate_implementation(specification)
         test_code = generate_tests(specification)
+        filenames = _generate_filenames(specification)
 
         # Write files to workspace
         await self._write_implementation_files(
             workspace["path"],
             implementation_code,
-            test_code
+            test_code,
+            filenames
         )
 
         # Run initial tests
@@ -129,8 +131,14 @@ class ImplementationMCPServer:
         # Basic constraint verification without Docker
         try:
             # Check if code compiles
-            implementation_file = workspace["path"] / "task_manager.py"
-            if implementation_file.exists():
+            # Find the implementation file (could have any name now)
+            implementation_files = list(workspace["path"].glob("*.py"))
+            implementation_file = None
+            for f in implementation_files:
+                if not f.name.startswith("test_") and f.name != "__init__.py":
+                    implementation_file = f
+                    break
+            if implementation_file and implementation_file.exists():
                 with open(implementation_file) as f:
                     code = f.read()
                     
@@ -180,16 +188,16 @@ class ImplementationMCPServer:
         (workspace_path / "__init__.py").write_text("")
 
     async def _write_implementation_files(self, workspace_path: Path, 
-                                        implementation_code: str, test_code: str):
+                                        implementation_code: str, test_code: str, filenames: dict):
         """Write generated files to workspace"""
-        (workspace_path / "task_manager.py").write_text(implementation_code)
+        (workspace_path / filenames['implementation']).write_text(implementation_code)
         
         # Fix test code imports and common issues
-        fixed_test_code = self._fix_test_code(test_code, implementation_code)
-        (workspace_path / "test_task_manager.py").write_text(fixed_test_code)
+        fixed_test_code = self._fix_test_code(test_code, implementation_code, filenames['module_name'])
+        (workspace_path / filenames['test']).write_text(fixed_test_code)
         
         # Create proper __init__.py that re-exports everything
-        init_content = self._generate_init_file(implementation_code)
+        init_content = self._generate_init_file(implementation_code, filenames['module_name'])
         (workspace_path / "__init__.py").write_text(init_content)
 
     def _parse_test_results(self, stdout: str, stderr: str, returncode: int) -> Dict:
@@ -210,7 +218,7 @@ class ImplementationMCPServer:
             "details": stdout if stdout else stderr
         }
 
-    def _fix_test_code(self, test_code: str, implementation_code: str) -> str:
+    def _fix_test_code(self, test_code: str, implementation_code: str, module_name: str) -> str:
         """Fix common issues in generated test code with enhanced patterns"""
         import re
         
@@ -228,11 +236,11 @@ class ImplementationMCPServer:
                 for import_stmt in analysis['required_imports']:
                     if import_stmt not in test_code:
                         fixed_lines.append(import_stmt)
-            elif 'from task_manager import' in line:
+            elif f'from {module_name} import' in line or 'from task_manager import' in line:
                 # Fix imports based on what's actually in implementation
                 imports = analysis['exports']
                 if imports:
-                    import_line = f"from task_manager import {', '.join(imports)}"
+                    import_line = f"from {module_name} import {', '.join(imports)}"
                     fixed_lines.append(import_line)
                 else:
                     # Skip the import line if no exports found
@@ -429,14 +437,14 @@ class ImplementationMCPServer:
         # we'd analyze the actual method names from the implementation
         return line
 
-    def _generate_init_file(self, implementation_code: str) -> str:
+    def _generate_init_file(self, implementation_code: str, module_name: str) -> str:
         """Generate proper __init__.py that re-exports everything"""
         exports = self._extract_exports_from_code(implementation_code)
         
         if not exports:
             return ""
             
-        init_content = f"from .task_manager import {', '.join(exports)}\n\n"
+        init_content = f"from .{module_name} import {', '.join(exports)}\n\n"
         init_content += f"__all__ = {exports}\n"
         
         return init_content
