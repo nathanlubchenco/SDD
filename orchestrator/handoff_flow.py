@@ -4,7 +4,7 @@ Spec-to-implementation handoff flow for SDD orchestrator.
 
 import yaml
 from pathlib import Path
-from core.openai_client import chat_completion
+from core.ai_client import chat_completion
 
 def handoff_flow(spec_path: Path, output_dir: Path):
     """

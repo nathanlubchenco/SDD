@@ -81,9 +81,39 @@ constraints:
 - **Human-in-the-Loop**: Humans approve behaviors, AI handles implementation details
 - **Self-Healing**: Systems detect and fix their own degradation
 
+## AI Client Configuration
+
+The system supports both OpenAI and Anthropic models. Configure via environment variables:
+
+```bash
+# Provider selection (defaults to openai)
+export AI_PROVIDER=anthropic  # or openai
+
+# API keys (at least one required)
+export OPENAI_API_KEY=your_openai_key
+export ANTHROPIC_API_KEY=your_anthropic_key
+
+# Optional: Override default models
+export OPENAI_MODEL=gpt-4-turbo
+export ANTHROPIC_MODEL=claude-3-opus-20240229
+```
+
+### Available Commands
+```bash
+# Show current configuration
+python core/ai_config.py config
+
+# List available models
+python core/ai_config.py models
+
+# Test connection
+python core/ai_config.py test --provider anthropic --model claude-3-sonnet-20240229
+```
+
 ## Dependencies
 - Python 3.11+
 - OpenAI API (configured via OPENAI_API_KEY environment variable)
+- Anthropic API (configured via ANTHROPIC_API_KEY environment variable)
 - pytest for testing
 - PyYAML for specification parsing
 
