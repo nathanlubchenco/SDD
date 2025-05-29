@@ -3,7 +3,7 @@ from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def chat_completion(messages, model="gpt-4", temperature=0.0, max_tokens=None):
+def chat_completion(messages, model="gpt-4o", temperature=0.0, max_tokens=None):
     """
     Send a sequence of chat messages to the OpenAI API and return the assistant's response text.
     """

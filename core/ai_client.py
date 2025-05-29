@@ -7,23 +7,50 @@ import os
 from typing import List, Dict, Any, Optional
 from core import openai_client, anthropic_client
 
-# Default models for each provider
+# Default models for each provider (latest as of 2025)
 DEFAULT_MODELS = {
-    "openai": "gpt-4",
-    "anthropic": "claude-3-sonnet-20240229"
+    "openai": "gpt-4o",
+    "anthropic": "claude-3-5-sonnet-20241022"
 }
 
 # Available models by provider
 AVAILABLE_MODELS = {
     "openai": [
-        "gpt-4",
+        # Reasoning models o-series (2024-2025)
+        "o4-mini",          # April 2025 - latest reasoning model
+        "o3",               # April 2025 - advanced reasoning
+        "o3-mini",          # January 2025 - efficient reasoning
+        "o1",               # September 2024 - original reasoning
+        "o1-preview",       # September 2024 - preview reasoning
+        "o1-mini",          # September 2024 - lightweight reasoning
+        # GPT-4.1 series (April 2025 - latest)
+        "gpt-4.1",
+        "gpt-4.1-mini", 
+        "gpt-4.1-nano",
+        # GPT-4o series (2024)
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4o-audio-preview",
+        # GPT-4 Turbo
         "gpt-4-turbo",
+        "gpt-4-turbo-2024-04-09",
+        # Legacy models
+        "gpt-4",
         "gpt-3.5-turbo"
     ],
     "anthropic": [
-        "claude-3-sonnet-20240229",
-        "claude-3-haiku-20240307",
-        "claude-3-opus-20240229"
+        # Claude 4 series (May 2025 - latest)
+        "claude-4-opus",
+        "claude-4-sonnet", 
+        # Claude 3.7 series (February 2025)
+        "claude-3-7-sonnet-20250224",
+        # Claude 3.5 series (2024)
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        # Claude 3 series (March 2024)
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229", 
+        "claude-3-haiku-20240307"
     ]
 }
 
@@ -58,14 +85,19 @@ def chat_completion(
         messages: List of message dicts with 'role' and 'content' keys
         provider: AI provider ('openai' or 'anthropic'). Defaults to env AI_PROVIDER or 'openai'
         model: Model name. Defaults to provider default or env {PROVIDER}_MODEL
-        temperature: Sampling temperature (0.0 to 1.0)
-        max_tokens: Maximum tokens in response
+        temperature: Sampling temperature (0.0 to 1.0). Note: o-series reasoning models may ignore this
+        max_tokens: Maximum tokens in response. Note: o-series models use max_completion_tokens
         
     Returns:
         The assistant's response text
         
     Raises:
         ValueError: If provider is not supported or model is not available
+        
+    Note:
+        OpenAI o-series reasoning models (o1, o3, o4-mini) use the same Chat Completions API
+        but have special behavior: they ignore temperature and may require max_completion_tokens
+        instead of max_tokens. They also perform internal reasoning steps before responding.
     """
     if provider is None:
         provider = get_default_provider()

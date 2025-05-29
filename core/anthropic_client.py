@@ -3,7 +3,7 @@ import anthropic
 
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-def chat_completion(messages, model="claude-3-sonnet-20240229", temperature=0.0, max_tokens=None):
+def chat_completion(messages, model="claude-3-5-sonnet-20241022", temperature=0.0, max_tokens=None):
     """
     Send a sequence of chat messages to the Anthropic API and return the assistant's response text.
     """
