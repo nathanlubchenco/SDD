@@ -1,0 +1,76 @@
+feature:
+  name: Library Management System
+  description: A comprehensive library system managing books, users, reservations, and lending with complex relationships
+
+scenarios:
+  - name: Reserve available book
+    given: Library has book "Python Programming" with 3 copies available and user "john_doe" is registered
+    when: User john_doe requests to reserve "Python Programming"
+    then:
+      - Reservation is created with unique ID
+      - Available copies decreases from 3 to 2
+      - User receives reservation confirmation
+      - Reservation expires in 7 days if not collected
+
+  - name: Lend reserved book
+    given: User "jane_smith" has active reservation for "Data Structures" and presents valid ID
+    when: Librarian processes book lending for the reservation
+    then:
+      - Reservation status changes to "fulfilled"
+      - Book status changes to "borrowed"
+      - Lending record is created with 14-day return period
+      - Late fee policy is activated for due date
+
+  - name: Handle book return with late fee
+    given: User "bob_wilson" returns "Algorithms" book 5 days after due date
+    when: Librarian processes the return
+    then:
+      - Book status changes to "available"
+      - Late fee of $2.50 (5 days × $0.50) is calculated
+      - User account is charged the late fee
+      - Book is marked for inspection before re-shelving
+
+  - name: Process inter-library loan
+    given: Requested book "Advanced Calculus" is not available in current library
+    when: User requests inter-library loan
+    then:
+      - Request is sent to partner libraries
+      - Estimated delivery time is provided (3-5 business days)
+      - User is notified when book arrives
+      - Special loan terms apply (21-day period, no renewal)
+
+  - name: Handle user suspension
+    given: User "alex_jones" has accumulated $25 in late fees over 30 days
+    when: System processes monthly account review
+    then:
+      - User account status changes to "suspended"
+      - All active reservations are cancelled
+      - User cannot make new reservations or loans
+      - Notification is sent with payment instructions
+
+constraints:
+  performance:
+    - name: Search response time
+      requirement: Book search must return results within 500ms
+    - name: Concurrent users
+      requirement: System must support 200 concurrent users during peak hours
+
+  security:
+    - name: User data protection
+      requirement: All personal information must be encrypted at rest
+    - name: Staff authentication
+      requirement: Administrative functions require multi-factor authentication
+
+  reliability:
+    - name: Data backup
+      requirement: All transaction data backed up every 4 hours
+    - name: System uptime
+      requirement: 99.5% availability during library operating hours
+
+  business_rules:
+    - name: Maximum reservations
+      requirement: Users can have maximum 5 active reservations
+    - name: Loan period limits
+      requirement: Standard loan period is 14 days, renewals add 7 days
+    - name: Late fee calculation
+      requirement: Late fees are $0.50 per day with $20 maximum cap

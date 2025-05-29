@@ -1,53 +1,61 @@
-# Multi-tenant E-commerce Platform Specification
+feature:
+  name: E-commerce Order Management
+  description: A comprehensive order management system for e-commerce platforms with performance, security, and reliability requirements
 
-system: Multi-tenant E-commerce Platform
-  description: B2B SaaS platform where businesses can create online stores
+scenarios:
+  - name: Process valid order
+    given: Customer has items in cart with total value $150
+    when: Customer submits order with valid payment information
+    then:
+      - Order is created with unique order ID
+      - Payment is processed successfully
+      - Inventory is updated for all items
+      - Order confirmation email is sent
+      - Order status is set to "processing"
 
-domains:
-  - name: tenant_management
-    dependencies: [authentication, billing]
+  - name: Handle insufficient inventory
+    given: Customer attempts to order 10 units of product with only 5 in stock
+    when: Customer submits the order
+    then:
+      - Order creation fails with InventoryError
+      - Error message indicates insufficient stock
+      - No payment is processed
+      - Cart remains unchanged
 
-  - name: product_catalog
-    dependencies: [tenant_management, search, media_storage]
+  - name: Process order with authentication
+    given: Authenticated user with valid session token
+    when: User places order through API
+    then:
+      - User identity is verified
+      - Order is associated with user account
+      - Order history is updated
+      - Audit log records the transaction
 
-  - name: shopping_cart
-    dependencies: [product_catalog, pricing_engine]
+constraints:
+  performance:
+    - name: API response time
+      requirement: p95 latency < 200ms for all order operations
+    - name: Payment processing
+      requirement: Payment gateway calls must complete within 5 seconds
+    - name: Memory usage
+      requirement: Memory usage should not exceed 512MB per process
 
-  - name: order_processing
-    dependencies: [shopping_cart, payment_gateway, inventory]
+  security:
+    - name: User authentication
+      requirement: All order operations require valid JWT authentication
+    - name: Input validation
+      requirement: All user inputs must be validated and sanitized
+    - name: Audit logging
+      requirement: All order operations must be logged for security audit
 
-  - name: search
-    dependencies: [product_catalog]
+  reliability:
+    - name: System availability
+      requirement: 99.9% uptime during business hours
+    - name: Data backup
+      requirement: Order data must be backed up every 15 minutes
 
-  - name: analytics
-    dependencies: [order_processing, tenant_management]
-
-global_constraints:
-  multi_tenancy:
-    - name: Complete data isolation
-      requirement: No tenant can access another tenant's data
-      verification: Automated penetration testing between tenants
-
-    - name: Performance isolation
-      requirement: One tenant's load cannot impact another's performance
-      measurement: Load test with asymmetric tenant usage
-
-  compliance:
-    - name: PCI DSS Level 1
-      requirement: Full compliance for payment processing
-
-    - name: GDPR compliance
-      requirement: Data deletion, portability, consent management
-
-    - name: SOC 2 Type II
-      requirement: Audit trail for all data access
-
-  scale:
-    - name: Tenant capacity
-      requirement: Support 10,000 active tenants
-
-    - name: Catalog size
-      requirement: 1M products per tenant without degradation
-
-    - name: Order volume
-      requirement: 100k orders/hour peak across all tenants
+  scalability:
+    - name: Concurrent orders
+      requirement: System must handle 1000 concurrent order requests
+    - name: Load handling
+      requirement: Support up to 10,000 orders per hour

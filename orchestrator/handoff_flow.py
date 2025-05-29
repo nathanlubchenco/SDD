@@ -3,37 +3,75 @@ Spec-to-implementation handoff flow for SDD orchestrator.
 """
 
 import yaml
+import hashlib
+import json
+import time
 from pathlib import Path
 from core.ai_client import chat_completion
 
-def handoff_flow(spec_path: Path, output_dir: Path):
+# In-memory cache for generated code
+_generation_cache = {}
+_cache_max_age = 3600  # 1 hour in seconds
+
+def handoff_flow(spec_path: Path, output_dir: Path, max_retries: int = 3):
     """
-    Entry point for spec-to-implementation pipeline.
+    Entry point for spec-to-implementation pipeline with enhanced error handling.
 
     Args:
         spec_path: Path to the specification YAML file.
         output_dir: Directory where generated code will be placed.
+        max_retries: Maximum number of retries for failed operations.
     """
-    # Load and parse the specification
-    with open(spec_path, 'r') as f:
-        spec = yaml.safe_load(f)
+    import logging
     
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
+    logger = logging.getLogger(__name__)
     
-    # Generate implementation based on spec
-    implementation_code = generate_implementation(spec)
-    
-    # Generate tests based on scenarios
-    test_code = generate_tests(spec)
-    
-    # Write generated files
-    (output_dir / "task_manager.py").write_text(implementation_code)
-    (output_dir / "test_task_manager.py").write_text(test_code)
-    (output_dir / "__init__.py").write_text("")
+    try:
+        # Load and parse the specification with validation
+        with open(spec_path, 'r') as f:
+            spec = yaml.safe_load(f)
+        
+        # Validate specification structure
+        _validate_specification(spec)
+        
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate implementation with retry logic
+        implementation_code = _generate_with_retry(
+            lambda: generate_implementation(spec),
+            "implementation",
+            max_retries
+        )
+        
+        # Generate tests with retry logic
+        test_code = _generate_with_retry(
+            lambda: generate_tests(spec),
+            "tests", 
+            max_retries
+        )
+        
+        # Write generated files with error handling
+        _write_files_safely(output_dir, implementation_code, test_code)
+        
+        logger.info(f"Successfully generated code in {output_dir}")
+        
+    except Exception as e:
+        logger.error(f"Handoff flow failed: {str(e)}")
+        # Clean up partial files on failure
+        _cleanup_on_failure(output_dir)
+        raise
 
 def generate_implementation(spec):
-    """Generate Python implementation code from specification."""
+    """Generate Python implementation code from specification with caching."""
+    
+    # Create cache key from spec content
+    cache_key = _create_cache_key(spec, "implementation")
+    
+    # Check cache first
+    cached_result = _get_from_cache(cache_key)
+    if cached_result:
+        return cached_result
     
     feature = spec.get('feature', {})
     if isinstance(feature, dict):
@@ -46,16 +84,35 @@ def generate_implementation(spec):
     scenarios = spec.get('scenarios', [])
     constraints = spec.get('constraints', {})
     
-    # Generate comprehensive prompt
+    # Generate comprehensive prompt with optimizations
     prompt_messages = build_implementation_prompt(
         feature_description, feature_desc_full, scenarios, constraints
     )
     
-    code = chat_completion(prompt_messages, max_tokens=3000)
-    return clean_code_response(code)
+    # Use optimized parameters for better performance
+    code = chat_completion(
+        prompt_messages, 
+        max_tokens=3000,
+        temperature=0.1  # Lower temperature for more consistent results
+    )
+    
+    result = clean_code_response(code)
+    
+    # Cache the result
+    _store_in_cache(cache_key, result)
+    
+    return result
 
 def generate_tests(spec):
-    """Generate test code based on scenarios."""
+    """Generate test code based on scenarios with caching."""
+    
+    # Create cache key from spec content
+    cache_key = _create_cache_key(spec, "tests")
+    
+    # Check cache first
+    cached_result = _get_from_cache(cache_key)
+    if cached_result:
+        return cached_result
     
     feature = spec.get('feature', {})
     if isinstance(feature, dict):
@@ -67,8 +124,19 @@ def generate_tests(spec):
     
     prompt_messages = build_test_prompt(feature_name, scenarios)
     
-    code = chat_completion(prompt_messages, max_tokens=2500)
-    return clean_code_response(code)
+    # Use optimized parameters for better performance
+    code = chat_completion(
+        prompt_messages, 
+        max_tokens=2500,
+        temperature=0.1  # Lower temperature for more consistent results
+    )
+    
+    result = clean_code_response(code)
+    
+    # Cache the result
+    _store_in_cache(cache_key, result)
+    
+    return result
 
 def build_test_prompt(feature_name, scenarios):
     """Build comprehensive test generation prompt."""
@@ -296,7 +364,7 @@ def extract_constraint_requirements(constraints):
     return requirements
 
 def format_constraints_for_prompt(constraints):
-    """Format constraints for the implementation prompt."""
+    """Format constraints for the implementation prompt with enhanced integration."""
     if not constraints:
         return "NON-FUNCTIONAL REQUIREMENTS: None specified"
     
@@ -309,11 +377,253 @@ def format_constraints_for_prompt(constraints):
     if not requirements:
         formatted.append("- None specified")
     
-    # Add implementation notes for common constraint types
-    if any('latency' in req.lower() or 'response time' in req.lower() for req in requirements):
-        formatted.append("\nImplementation Note: Consider adding timing/performance monitoring")
-    
-    if any('authentication' in req.lower() or 'jwt' in req.lower() for req in requirements):
-        formatted.append("\nImplementation Note: Add authentication validation to relevant methods")
+    # Enhanced constraint integration with specific implementation guidance
+    constraint_implementations = generate_constraint_implementations(constraints)
+    if constraint_implementations:
+        formatted.append("\nCONSTRAINT IMPLEMENTATION REQUIREMENTS:")
+        for impl in constraint_implementations:
+            formatted.append(f"- {impl}")
         
     return '\n'.join(formatted)
+
+def generate_constraint_implementations(constraints):
+    """Generate specific implementation requirements from constraints."""
+    implementations = []
+    
+    for category, constraint_list in constraints.items():
+        if not isinstance(constraint_list, list):
+            continue
+            
+        for constraint in constraint_list:
+            if not isinstance(constraint, dict):
+                continue
+                
+            requirement = constraint.get('requirement', '').lower()
+            name = constraint.get('name', '').lower()
+            
+            # Performance constraints
+            if category.lower() == 'performance':
+                if 'response time' in requirement or 'latency' in requirement:
+                    implementations.extend([
+                        "Add timing decorators to all public methods",
+                        "Include performance logging with method execution times",
+                        "Add timeout handling for operations that might exceed limits",
+                        "Consider adding async/await for I/O operations if applicable"
+                    ])
+                elif 'throughput' in requirement or 'requests per second' in requirement:
+                    implementations.extend([
+                        "Implement connection pooling for database operations",
+                        "Add rate limiting mechanisms",
+                        "Consider batch processing for bulk operations"
+                    ])
+                elif 'memory' in requirement:
+                    implementations.extend([
+                        "Use generators for large data sets",
+                        "Implement proper resource cleanup (context managers)",
+                        "Add memory usage monitoring"
+                    ])
+            
+            # Security constraints
+            elif category.lower() == 'security':
+                if 'authentication' in requirement or 'auth' in requirement:
+                    implementations.extend([
+                        "Add user authentication validation to all protected methods",
+                        "Implement JWT token verification decorator",
+                        "Include user permission checks based on roles"
+                    ])
+                elif 'validation' in requirement or 'input' in requirement:
+                    implementations.extend([
+                        "Add comprehensive input validation using pydantic models",
+                        "Implement sanitization for all user inputs",
+                        "Add parameter type checking and bounds validation"
+                    ])
+                elif 'encryption' in requirement:
+                    implementations.append("Add encryption for sensitive data fields")
+                elif 'audit' in requirement or 'logging' in requirement:
+                    implementations.extend([
+                        "Implement audit logging for all state changes",
+                        "Add user action tracking with timestamps",
+                        "Include security event logging"
+                    ])
+            
+            # Reliability constraints
+            elif category.lower() == 'reliability':
+                if 'availability' in requirement or 'uptime' in requirement:
+                    implementations.extend([
+                        "Add health check endpoints",
+                        "Implement graceful error handling with retry logic",
+                        "Add circuit breaker pattern for external dependencies"
+                    ])
+                elif 'backup' in requirement or 'recovery' in requirement:
+                    implementations.extend([
+                        "Implement data backup mechanisms",
+                        "Add transaction rollback support",
+                        "Include disaster recovery procedures"
+                    ])
+            
+            # Scalability constraints
+            elif category.lower() == 'scalability':
+                if 'concurrent' in requirement or 'parallel' in requirement:
+                    implementations.extend([
+                        "Implement thread-safe operations using locks where needed",
+                        "Add async processing capabilities",
+                        "Consider using connection pooling"
+                    ])
+                elif 'load' in requirement:
+                    implementations.extend([
+                        "Implement caching mechanisms for frequently accessed data",
+                        "Add horizontal scaling support through stateless design",
+                        "Consider database indexing for query optimization"
+                    ])
+    
+    return list(set(implementations))  # Remove duplicates
+
+# Cache management functions
+def _create_cache_key(spec: dict, generation_type: str) -> str:
+    """Create a deterministic cache key from specification content."""
+    # Create a normalized representation of the spec
+    spec_str = json.dumps(spec, sort_keys=True, ensure_ascii=True)
+    combined = f"{generation_type}:{spec_str}"
+    return hashlib.sha256(combined.encode()).hexdigest()
+
+def _get_from_cache(cache_key: str):
+    """Retrieve cached result if valid and not expired."""
+    if cache_key in _generation_cache:
+        cached_item = _generation_cache[cache_key]
+        if time.time() - cached_item['timestamp'] < _cache_max_age:
+            return cached_item['result']
+        else:
+            # Remove expired cache entry
+            del _generation_cache[cache_key]
+    return None
+
+def _store_in_cache(cache_key: str, result: str):
+    """Store result in cache with timestamp."""
+    _generation_cache[cache_key] = {
+        'result': result,
+        'timestamp': time.time()
+    }
+
+def clear_generation_cache():
+    """Clear the generation cache (useful for testing or manual cache management)."""
+    global _generation_cache
+    _generation_cache = {}
+
+def get_cache_stats():
+    """Get cache statistics for monitoring."""
+    current_time = time.time()
+    total_entries = len(_generation_cache)
+    expired_entries = sum(1 for item in _generation_cache.values() 
+                         if current_time - item['timestamp'] >= _cache_max_age)
+    active_entries = total_entries - expired_entries
+    
+    return {
+        'total_entries': total_entries,
+        'active_entries': active_entries,
+        'expired_entries': expired_entries,
+        'cache_hit_potential': active_entries > 0
+    }
+
+# Error handling and reliability functions
+def _validate_specification(spec: dict):
+    """Validate the specification structure."""
+    if not isinstance(spec, dict):
+        raise ValueError("Specification must be a dictionary")
+    
+    if 'feature' not in spec:
+        raise ValueError("Specification missing required 'feature' field")
+    
+    scenarios = spec.get('scenarios', [])
+    if not isinstance(scenarios, list) or len(scenarios) == 0:
+        raise ValueError("Specification must have at least one scenario")
+    
+    # Validate scenario structure
+    for i, scenario in enumerate(scenarios):
+        if not isinstance(scenario, dict):
+            raise ValueError(f"Scenario {i} must be a dictionary")
+        
+        required_fields = ['name', 'when', 'then']
+        for field in required_fields:
+            if field not in scenario:
+                raise ValueError(f"Scenario {i} missing required field: {field}")
+        
+        # 'given' is optional for some scenarios
+
+def _generate_with_retry(generate_func, operation_type: str, max_retries: int):
+    """Execute generation function with retry logic."""
+    import logging
+    import time
+    
+    logger = logging.getLogger(__name__)
+    
+    for attempt in range(max_retries):
+        try:
+            result = generate_func()
+            if result and len(result.strip()) > 50:  # Basic sanity check
+                logger.info(f"Successfully generated {operation_type} on attempt {attempt + 1}")
+                return result
+            else:
+                raise ValueError(f"Generated {operation_type} is too short or empty")
+                
+        except Exception as e:
+            logger.warning(f"Generation attempt {attempt + 1} failed for {operation_type}: {str(e)}")
+            if attempt == max_retries - 1:
+                raise
+            else:
+                # Exponential backoff
+                time.sleep(2 ** attempt)
+    
+    raise RuntimeError(f"Failed to generate {operation_type} after {max_retries} attempts")
+
+def _write_files_safely(output_dir: Path, implementation_code: str, test_code: str):
+    """Write generated files with atomic operations and validation."""
+    import tempfile
+    import shutil
+    
+    # Write to temporary files first
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as tmp_impl:
+        tmp_impl.write(implementation_code)
+        tmp_impl_path = tmp_impl.name
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as tmp_test:
+        tmp_test.write(test_code)
+        tmp_test_path = tmp_test.name
+    
+    try:
+        # Validate generated code syntax
+        _validate_python_syntax(tmp_impl_path)
+        _validate_python_syntax(tmp_test_path)
+        
+        # If validation passes, move to final location
+        shutil.move(tmp_impl_path, output_dir / "task_manager.py")
+        shutil.move(tmp_test_path, output_dir / "test_task_manager.py")
+        
+        # Create __init__.py
+        (output_dir / "__init__.py").write_text("")
+        
+    except Exception as e:
+        # Clean up temp files on error
+        Path(tmp_impl_path).unlink(missing_ok=True)
+        Path(tmp_test_path).unlink(missing_ok=True)
+        raise
+
+def _validate_python_syntax(file_path: str):
+    """Validate that a Python file has correct syntax."""
+    import ast
+    
+    with open(file_path, 'r') as f:
+        content = f.read()
+    
+    try:
+        ast.parse(content)
+    except SyntaxError as e:
+        raise ValueError(f"Generated Python code has syntax errors: {str(e)}")
+
+def _cleanup_on_failure(output_dir: Path):
+    """Clean up any partially created files on failure."""
+    try:
+        if output_dir.exists():
+            for file in ["task_manager.py", "test_task_manager.py", "__init__.py"]:
+                (output_dir / file).unlink(missing_ok=True)
+    except Exception:
+        pass  # Best effort cleanup

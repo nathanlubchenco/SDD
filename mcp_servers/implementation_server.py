@@ -211,68 +211,223 @@ class ImplementationMCPServer:
         }
 
     def _fix_test_code(self, test_code: str, implementation_code: str) -> str:
-        """Fix common issues in generated test code"""
+        """Fix common issues in generated test code with enhanced patterns"""
+        import re
+        
         lines = test_code.split('\n')
         fixed_lines = []
         
-        # Track what we need to import
-        needs_uuid = 'uuid.UUID' in implementation_code or 'UUID(' in implementation_code
-        needs_datetime = 'datetime' in implementation_code and 'from datetime import datetime' not in test_code
+        # Enhanced analysis of implementation code
+        analysis = self._analyze_implementation_code(implementation_code)
         
         for line in lines:
             # Fix import statements
             if line.startswith('import pytest'):
                 fixed_lines.append(line)
-                if needs_uuid and 'import uuid' not in test_code:
-                    fixed_lines.append('import uuid')
-                if needs_datetime:
-                    fixed_lines.append('from datetime import datetime')
+                # Add required imports based on analysis
+                for import_stmt in analysis['required_imports']:
+                    if import_stmt not in test_code:
+                        fixed_lines.append(import_stmt)
             elif 'from task_manager import' in line:
                 # Fix imports based on what's actually in implementation
-                imports = self._extract_exports_from_code(implementation_code)
-                import_line = f"from task_manager import {', '.join(imports)}"
-                fixed_lines.append(import_line)
-            elif 'isinstance(task.id, int)' in line:
-                # Fix ID type assertion
-                if needs_uuid:
-                    fixed_line = line.replace('isinstance(task.id, int)', 'isinstance(task.id, uuid.UUID)')
-                    fixed_line = fixed_line.replace('Task ID is not unique', 'Task ID is not a UUID')
-                    fixed_lines.append(fixed_line)
+                imports = analysis['exports']
+                if imports:
+                    import_line = f"from task_manager import {', '.join(imports)}"
+                    fixed_lines.append(import_line)
                 else:
-                    fixed_lines.append(line)
-            elif 'task.status ==' in line and '"' in line:
-                # Fix status comparisons to use enum
-                if 'TaskStatus' in implementation_code:
-                    if '"pending"' in line:
-                        fixed_line = line.replace('"pending"', 'TaskStatus.PENDING')
-                        fixed_lines.append(fixed_line)
-                    elif '"completed"' in line:
-                        fixed_line = line.replace('"completed"', 'TaskStatus.COMPLETED')
-                        fixed_lines.append(fixed_line)
-                    else:
-                        fixed_lines.append(line)
-                else:
-                    fixed_lines.append(line)
-            elif 'status="pending"' in line or 'status="completed"' in line:
-                # Fix status parameters to use enum
-                if 'TaskStatus' in implementation_code:
-                    fixed_line = line.replace('status="pending"', 'status=TaskStatus.PENDING')
-                    fixed_line = fixed_line.replace('status="completed"', 'status=TaskStatus.COMPLETED')
-                    fixed_lines.append(fixed_line)
-                else:
-                    fixed_lines.append(line)
-            elif 'TaskError' in line:
-                # Fix exception references
-                exception_classes = [name for name in self._extract_exports_from_code(implementation_code) if 'Error' in name]
-                if exception_classes:
-                    fixed_line = line.replace('TaskError', exception_classes[0])
-                    fixed_lines.append(fixed_line)
-                else:
-                    fixed_lines.append(line)
+                    # Skip the import line if no exports found
+                    fixed_lines.append("# No exports found in implementation")
+                    continue
             else:
-                fixed_lines.append(line)
+                # Apply comprehensive fixes
+                fixed_line = line
+                fixed_line = self._fix_id_type_checks(fixed_line, analysis)
+                fixed_line = self._fix_status_comparisons(fixed_line, analysis)
+                fixed_line = self._fix_enum_usage(fixed_line, analysis)
+                fixed_line = self._fix_exception_references(fixed_line, analysis)
+                fixed_line = self._fix_method_calls(fixed_line, analysis)
+                fixed_lines.append(fixed_line)
                 
         return '\n'.join(fixed_lines)
+
+    def _analyze_implementation_code(self, implementation_code: str) -> Dict:
+        """Comprehensive analysis of implementation code for better fixing"""
+        import re
+        
+        analysis = {
+            'exports': [],
+            'enums': {},
+            'exceptions': [],
+            'methods': [],
+            'fields': [],
+            'required_imports': [],
+            'id_type': 'int',
+            'uses_dataclass': False,
+            'uses_enum': False
+        }
+        
+        # Extract class definitions and exports
+        analysis['exports'] = self._extract_exports_from_code(implementation_code)
+        
+        # Detect ID type
+        if 'uuid.UUID' in implementation_code or 'UUID(' in implementation_code:
+            analysis['id_type'] = 'uuid'
+            analysis['required_imports'].append('import uuid')
+        elif 'id: str' in implementation_code:
+            analysis['id_type'] = 'str'
+            
+        # Detect datetime usage
+        if 'datetime' in implementation_code and 'from datetime import datetime' not in implementation_code:
+            analysis['required_imports'].append('from datetime import datetime')
+            
+        # Extract enum definitions with comprehensive patterns
+        enum_patterns = [
+            r'class\s+(\w*Status\w*)\s*\([^)]*Enum[^)]*\):\s*\n((?:\s+\w+\s*=\s*["\'][^"\']+["\']\s*\n?)*)',
+            r'class\s+(\w+)\s*\([^)]*Enum[^)]*\):\s*\n((?:\s+\w+\s*=\s*["\'][^"\']+["\']\s*\n?)*)',
+        ]
+        
+        for pattern in enum_patterns:
+            for match in re.finditer(pattern, implementation_code, re.MULTILINE):
+                enum_name = match.group(1)
+                enum_body = match.group(2)
+                analysis['enums'][enum_name] = {}
+                analysis['uses_enum'] = True
+                
+                # Extract enum values
+                value_pattern = r'\s*(\w+)\s*=\s*["\']([^"\']+)["\']\s*'
+                for value_match in re.finditer(value_pattern, enum_body):
+                    key, value = value_match.groups()
+                    analysis['enums'][enum_name][value.lower()] = f"{enum_name}.{key}"
+        
+        # Extract exception classes
+        exception_pattern = r'class\s+(\w*(?:Error|Exception)\w*)\s*\([^)]*\):'
+        analysis['exceptions'] = [match.group(1) for match in re.finditer(exception_pattern, implementation_code)]
+        
+        # Detect dataclass usage
+        if '@dataclass' in implementation_code:
+            analysis['uses_dataclass'] = True
+            
+        return analysis
+
+    def _fix_id_type_checks(self, line: str, analysis: Dict) -> str:
+        """Fix ID type assertions based on implementation"""
+        import re
+        
+        if analysis['id_type'] == 'uuid':
+            # Fix isinstance checks for UUID
+            line = re.sub(r'isinstance\(([^,]+)\.id,\s*int\)', r'isinstance(\1.id, uuid.UUID)', line)
+            # Fix assertion messages
+            line = line.replace('Task ID is not unique', 'Task ID is not a UUID')
+            line = line.replace('ID should be an integer', 'ID should be a UUID')
+        elif analysis['id_type'] == 'str':
+            # Fix isinstance checks for string IDs
+            line = re.sub(r'isinstance\(([^,]+)\.id,\s*int\)', r'isinstance(\1.id, str)', line)
+            
+        return line
+
+    def _fix_status_comparisons(self, line: str, analysis: Dict) -> str:
+        """Fix status comparisons with comprehensive enum handling"""
+        import re
+        
+        if not analysis['uses_enum'] or not analysis['enums']:
+            return line
+            
+        # Find the main status enum (usually the first one or one with 'Status' in name)
+        status_enum = None
+        for enum_name, enum_values in analysis['enums'].items():
+            if 'status' in enum_name.lower() or len(analysis['enums']) == 1:
+                status_enum = enum_name
+                enum_mappings = enum_values
+                break
+                
+        if not status_enum:
+            return line
+            
+        # Comprehensive status comparison patterns
+        comparison_patterns = [
+            (r'(\w+)\.status\s*(==|!=)\s*["\']([^"\']+)["\']', r'\1.status \2 {enum_value}'),
+            (r'(["\'])([^"\']+)\1\s*(==|!=)\s*(\w+)\.status', r'{enum_value} \3 \4.status'),
+            (r'status\s*(==|!=)\s*["\']([^"\']+)["\']', r'status \1 {enum_value}'),
+            (r'assert\s+(\w+)\.status\s*==\s*["\']([^"\']+)["\']', r'assert \1.status == {enum_value}'),
+        ]
+        
+        for pattern, replacement in comparison_patterns:
+            def replace_status(match):
+                groups = match.groups()
+                if len(groups) >= 3:
+                    status_value = None
+                    for i, group in enumerate(groups):
+                        if group and group.lower() in enum_mappings:
+                            status_value = enum_mappings[group.lower()]
+                            break
+                    if status_value:
+                        return replacement.format(enum_value=status_value)
+                return match.group(0)
+                
+            line = re.sub(pattern, replace_status, line)
+            
+        return line
+
+    def _fix_enum_usage(self, line: str, analysis: Dict) -> str:
+        """Fix enum parameter usage in method calls"""
+        import re
+        
+        if not analysis['uses_enum'] or not analysis['enums']:
+            return line
+            
+        # Fix enum usage in method parameters
+        for enum_name, enum_values in analysis['enums'].items():
+            for string_value, enum_value in enum_values.items():
+                # Fix parameter assignments
+                patterns = [
+                    rf'status\s*=\s*["\']({string_value})["\']',
+                    rf'status\s*=\s*"{string_value}"',
+                    rf"status\s*=\s*'{string_value}'",
+                ]
+                
+                for pattern in patterns:
+                    line = re.sub(pattern, f'status={enum_value}', line, flags=re.IGNORECASE)
+                    
+        return line
+
+    def _fix_exception_references(self, line: str, analysis: Dict) -> str:
+        """Fix exception class references"""
+        if not analysis['exceptions']:
+            return line
+            
+        # Replace generic exception names with actual ones
+        generic_exceptions = ['TaskError', 'ValidationError', 'BusinessError']
+        for generic in generic_exceptions:
+            if generic in line:
+                # Use the first matching exception or the first available one
+                actual_exception = None
+                for exc in analysis['exceptions']:
+                    if generic.lower() in exc.lower():
+                        actual_exception = exc
+                        break
+                if not actual_exception and analysis['exceptions']:
+                    actual_exception = analysis['exceptions'][0]
+                    
+                if actual_exception:
+                    line = line.replace(generic, actual_exception)
+                    
+        return line
+
+    def _fix_method_calls(self, line: str, analysis: Dict) -> str:
+        """Fix method calls based on actual implementation"""
+        import re
+        
+        # Common method name variations
+        method_mappings = {
+            'add_task': ['add_task', 'create_task', 'new_task'],
+            'get_task': ['get_task', 'find_task', 'retrieve_task'],
+            'list_tasks': ['list_tasks', 'get_tasks', 'all_tasks'],
+            'complete_task': ['complete_task', 'mark_complete', 'finish_task'],
+        }
+        
+        # This is a simplified version - in a real implementation,
+        # we'd analyze the actual method names from the implementation
+        return line
 
     def _generate_init_file(self, implementation_code: str) -> str:
         """Generate proper __init__.py that re-exports everything"""
@@ -287,17 +442,28 @@ class ImplementationMCPServer:
         return init_content
 
     def _extract_exports_from_code(self, code: str) -> List[str]:
-        """Extract class and exception names from implementation code"""
-        exports = []
-        lines = code.split('\n')
+        """Extract class and exception names from implementation code using AST"""
+        import ast
         
-        for line in lines:
-            line = line.strip()
-            if line.startswith('class ') and '(' in line:
-                class_name = line.split('class ')[1].split('(')[0].split(':')[0].strip()
-                exports.append(class_name)
-            elif line.startswith('class ') and ':' in line:
-                class_name = line.split('class ')[1].split(':')[0].strip()
-                exports.append(class_name)
-                
+        exports = []
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    exports.append(node.name)
+                elif isinstance(node, ast.FunctionDef) and not node.name.startswith('_'):
+                    # Include public functions as well
+                    exports.append(node.name)
+        except SyntaxError:
+            # Fallback to regex-based extraction if AST fails
+            lines = code.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line.startswith('class ') and '(' in line:
+                    class_name = line.split('class ')[1].split('(')[0].split(':')[0].strip()
+                    exports.append(class_name)
+                elif line.startswith('class ') and ':' in line:
+                    class_name = line.split('class ')[1].split(':')[0].strip()
+                    exports.append(class_name)
+                    
         return exports
