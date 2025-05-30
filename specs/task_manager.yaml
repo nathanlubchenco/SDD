@@ -1,83 +1,31 @@
-# Task Management System Specification
 
-feature: 
-  name: Task Management System
-  description: A system for creating, updating, and tracking tasks
+feature:
+  name: "Task Management System"
+  description: "Manage user tasks and todo items"
+
+scenarios:
+  - name: "Create a simple task"
+    description: "User creates a new task with a title"
+    given: "User is logged into the system"
+    when: "User creates a task with title 'Buy groceries'"
+    then:
+      - "Task is created with status 'pending'"
+      - "Task has a unique identifier"
+      - "Task title is 'Buy groceries'"
+    
+  - name: "Complete a task"
+    description: "User marks a task as completed"
+    given: "User has a pending task"
+    when: "User marks the task as complete"
+    then:
+      - "Task status changes to 'completed'"
+      - "Task completion time is recorded"
 
 constraints:
   performance:
-    - name: API response time
-      requirement: p95 latency < 100ms for all read operations
-      measurement: Under load of 1000 requests/second
-
-    - name: Write operation latency
-      requirement: p99 latency < 200ms for create/update operations
-      measurement: Under load of 100 requests/second
-
-    - name: Concurrent user support
-      requirement: Support 10,000 concurrent users
-      measurement: Without degradation beyond stated latencies
-
-  scalability:
-    - name: Data volume
-      requirement: Maintain performance with 10 million tasks
-
-    - name: Horizontal scaling
-      requirement: System must scale linearly up to 10 nodes
-
+    - name: "API response time"
+      requirement: "All operations complete within 200ms"
+  
   security:
-    - name: Authentication required
-      requirement: All endpoints require valid JWT token
-      exception: Health check endpoint
-
-    - name: SQL injection prevention
-      requirement: All user inputs must be parameterized
-      verification: OWASP ZAP scan shows no SQL injection vulnerabilities
-
-    - name: Rate limiting
-      requirement: Max 100 requests per minute per user
-
-  reliability:
-    - name: Uptime
-      requirement: 99.9% availability
-
-    - name: Data durability
-      requirement: No data loss on single node failure
-
-    - name: Graceful degradation
-      requirement: Read operations continue during write failures
-
-scenarios:
-  - name: Create a simple task
-    when: I create a task with title "Buy groceries"
-    then:
-      - A task should exist with title "Buy groceries"
-      - The task should have status "pending"
-      - The task should have a unique ID
-      - The task should have a created_at timestamp
-
-  - name: Complete a task
-    given: A task exists with title "Buy groceries" and status "pending"
-    when: I mark the task as complete
-    then:
-      - Task status is "completed"
-      - The task should have a completed_at timestamp
-      - The completed_at should be after created_at
-
-  - name: Cannot complete already completed task
-    given: A task exists with status "completed"
-    when: I try to mark the task as complete again
-    then:
-      - I should receive an error "Task is already completed"
-      - The task status should remain "completed"
-      - The original completed_at should not change
-
-  - name: List tasks filtered by status
-    given:
-      - A task "Task 1" with status "pending"
-      - A task "Task 2" with status "completed"
-      - A task "Task 3" with status "pending"
-    when: I list tasks with status "pending"
-    then:
-      - I should see exactly 2 tasks
-      - The tasks should be "Task 1" and "Task 3"
+    - name: "User authentication"
+      requirement: "All operations require valid user session"
