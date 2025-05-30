@@ -151,6 +151,12 @@ Examples:
         )
         
         generate_parser.add_argument(
+            '--show-prompts',
+            action='store_true',
+            help='Display AI prompts and responses for debugging'
+        )
+        
+        generate_parser.add_argument(
             '--quiet', '-q',
             action='store_true',
             help='Minimal output'
@@ -180,6 +186,12 @@ Examples:
             '--verbose', '-v',
             action='store_true',
             help='Verbose test output'
+        )
+        
+        test_parser.add_argument(
+            '--show-prompts',
+            action='store_true',
+            help='Display AI prompts and responses for debugging'
         )
         
         test_parser.add_argument(
@@ -214,6 +226,12 @@ Examples:
             choices=['basic', 'comprehensive', 'performance'],
             default='comprehensive',
             help='Type of analysis to perform (default: comprehensive)'
+        )
+        
+        analyze_parser.add_argument(
+            '--show-prompts',
+            action='store_true',
+            help='Display AI prompts and responses for debugging'
         )
         
         analyze_parser.add_argument(
@@ -284,7 +302,9 @@ Examples:
             # Initialize orchestrator
             orchestrator = IterativeOrchestrator(
                 workspace_path=str(output_dir),
-                max_iterations=args.max_iterations
+                max_iterations=args.max_iterations,
+                verbose=args.verbose,
+                show_prompts=getattr(args, 'show_prompts', False)
             )
             await orchestrator.initialize()
             
@@ -430,7 +450,7 @@ Examples:
             print(f"🧪 Testing implementation in: {workspace_path}")
             
             # Initialize orchestrator
-            orchestrator = IterativeOrchestrator(str(workspace_path))
+            orchestrator = IterativeOrchestrator(str(workspace_path), verbose=args.verbose, show_prompts=getattr(args, 'show_prompts', False))
             await orchestrator.initialize()
             
             # Find the main implementation file
@@ -487,7 +507,7 @@ Examples:
             print(f"🔍 Analyzing: {code_path}")
             
             # Initialize orchestrator for analysis
-            orchestrator = IterativeOrchestrator("temp_analysis")
+            orchestrator = IterativeOrchestrator("temp_analysis", verbose=args.verbose, show_prompts=getattr(args, 'show_prompts', False))
             await orchestrator.initialize()
             
             # Create mock implementation for analysis

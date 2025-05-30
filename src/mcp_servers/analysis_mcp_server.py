@@ -25,8 +25,8 @@ class AnalysisMCPServer(BaseMCPServer):
     and identify areas for improvement in its own generated code.
     """
 
-    def __init__(self):
-        super().__init__("analysis-server", "1.0.0")
+    def __init__(self, show_prompts: bool = False):
+        super().__init__("analysis-server", "1.0.0", show_prompts=show_prompts)
         
     def _register_capabilities(self):
         """Register code analysis and introspection tools."""

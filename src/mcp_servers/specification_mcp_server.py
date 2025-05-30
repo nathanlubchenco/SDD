@@ -21,13 +21,13 @@ class SpecificationMCPServer(BaseMCPServer):
     MCP protocol implementation and AI-driven capabilities.
     """
 
-    def __init__(self, spec_directory: Path):
+    def __init__(self, spec_directory: Path, show_prompts: bool = False):
         self.spec_dir = spec_directory
         self.spec_dir.mkdir(parents=True, exist_ok=True)
         self.scenario_cache = {}
         
         # Initialize parent class first to set up logger
-        super().__init__("specification-server", "1.0.0")
+        super().__init__("specification-server", "1.0.0", show_prompts=show_prompts)
         
         # Now load specifications with logger available
         self.specs = self._load_specifications()

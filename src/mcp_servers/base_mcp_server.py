@@ -49,9 +49,10 @@ class BaseMCPServer(ABC):
     specialized servers (Docker, Specification, Implementation, etc.)
     """
 
-    def __init__(self, name: str, version: str = "1.0.0"):
+    def __init__(self, name: str, version: str = "1.0.0", show_prompts: bool = False):
         self.name = name
         self.version = version
+        self.show_prompts = show_prompts
         self.tools: Dict[str, MCPTool] = {}
         self.resources: Dict[str, MCPResource] = {}
         self.prompts: Dict[str, MCPPrompt] = {}
@@ -63,13 +64,39 @@ class BaseMCPServer(ABC):
         # Register tools, resources, and prompts
         self._register_capabilities()
 
+    def _log_prompt(self, operation: str, prompt: str, response: str = None):
+        """Log AI prompts and responses when show_prompts is enabled."""
+        if not self.show_prompts:
+            return
+            
+        print(f"\n🤖 AI PROMPT ({operation})")
+        print("=" * 80)
+        print(prompt)
+        print("=" * 80)
+        
+        if response:
+            print(f"\n🔮 AI RESPONSE ({operation})")
+            print("-" * 80)
+            # Truncate very long responses for readability
+            if len(response) > 2000:
+                truncated = response[:1000] + "\n\n... [TRUNCATED] ...\n\n" + response[-1000:]
+                print(truncated)
+            else:
+                print(response)
+            print("-" * 80)
+            print()
+
     def _init_ai_client(self):
         """Initialize AI client for tool implementations."""
         try:
             from src.core import ai_client
             self.ai_client = ai_client
+            self.logger.info("AI client module loaded successfully")
         except ImportError as e:
             self.logger.warning(f"AI client not available: {e}")
+            self.ai_client = None
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize AI client: {e}")
             self.ai_client = None
 
     @abstractmethod
@@ -215,6 +242,12 @@ class BaseMCPServer(ABC):
                 
                 self.logger.log_mcp_call(self.name, tool_name, arguments, result=result)
                 
+                # Ensure result is JSON serializable
+                if isinstance(result, dict):
+                    content_text = json.dumps(result, indent=2, default=str)
+                else:
+                    content_text = str(result)
+                
                 return {
                     "jsonrpc": "2.0",
                     "id": request_id,
@@ -222,7 +255,7 @@ class BaseMCPServer(ABC):
                         "content": [
                             {
                                 "type": "text",
-                                "text": str(result)
+                                "text": content_text
                             }
                         ]
                     }

@@ -31,20 +31,148 @@ class IterativeOrchestrator:
     5. Repeat until satisfactory quality is achieved
     """
 
-    def __init__(self, workspace_path: str, max_iterations: int = 5):
+    def __init__(self, workspace_path: str, max_iterations: int = 5, verbose: bool = False, show_prompts: bool = False):
         self.workspace_path = Path(workspace_path)
         self.max_iterations = max_iterations
+        self.verbose = verbose
+        self.show_prompts = show_prompts
         self.logger = get_logger("sdd.orchestrator")
         
         # Initialize MCP servers
-        self.spec_server = SpecificationMCPServer(Path("specs"))
-        self.impl_server = ImplementationMCPServer()
-        self.test_server = TestingMCPServer()
-        self.analysis_server = AnalysisMCPServer()
-        self.docker_server = DockerMCPServer()
+        self.spec_server = SpecificationMCPServer(Path("specs"), show_prompts=show_prompts)
+        self.impl_server = ImplementationMCPServer(show_prompts=show_prompts)
+        self.test_server = TestingMCPServer(show_prompts=show_prompts)
+        self.analysis_server = AnalysisMCPServer(show_prompts=show_prompts)
+        self.docker_server = DockerMCPServer(show_prompts=show_prompts)
         
         # Track iteration history
         self.iteration_history = []
+    
+    def _verbose_log(self, message: str, code_snippet: str = None, max_lines: int = 20):
+        """Log verbose information including code snippets when in verbose mode."""
+        if not self.verbose:
+            return
+            
+        print(f"🔍 {message}")
+        
+        if code_snippet:
+            lines = code_snippet.split('\n')
+            if len(lines) > max_lines:
+                # Show first few and last few lines
+                shown_lines = lines[:max_lines//2] + ['...'] + lines[-(max_lines//2):]
+                code_snippet = '\n'.join(shown_lines)
+            
+            print("📝 Code:")
+            print("─" * 50)
+            for i, line in enumerate(code_snippet.split('\n'), 1):
+                print(f"{i:3d} | {line}")
+            print("─" * 50)
+    
+    def _verbose_log_test_results(self, test_result: Dict[str, Any], iteration: int):
+        """Log detailed test results in verbose mode."""
+        print(f"🧪 Test Results for Iteration {iteration}:")
+        
+        syntax_check = test_result.get("syntax_check", {})
+        dependency_check = test_result.get("dependency_check", {})
+        linting = test_result.get("linting", {})
+        unit_tests = test_result.get("unit_tests", {})
+        overall_success = test_result.get("overall_success", False)
+        
+        print(f"   Overall Success: {'✅' if overall_success else '❌'}")
+        print(f"   Syntax Valid: {'✅' if syntax_check.get('valid', False) else '❌'}")
+        print(f"   Dependencies Available: {'✅' if dependency_check.get('all_available', False) else '❌'}")
+        
+        issues_count = linting.get("issues_count", 0)
+        print(f"   Linting Issues: {issues_count} {'✅' if issues_count < 5 else '⚠️'}")
+        
+        if unit_tests:
+            unit_success = unit_tests.get("success", False)
+            print(f"   Unit Tests: {'✅' if unit_success else '❌'}")
+            
+        # Show specific errors if any
+        if syntax_check.get("error"):
+            print(f"   🔍 Syntax Error: {syntax_check['error']}")
+        if dependency_check.get("missing_dependencies"):
+            print(f"   🔍 Missing Dependencies: {dependency_check['missing_dependencies']}")
+        if test_result.get("error"):
+            print(f"   🔍 Test Error: {test_result['error']}")
+    
+    def _verbose_log_analysis_results(self, analysis_result: Dict[str, Any], iteration: int):
+        """Log detailed analysis results in verbose mode."""
+        print(f"📊 Analysis Results for Iteration {iteration}:")
+        
+        code_quality = analysis_result.get("code_quality", {})
+        performance = analysis_result.get("performance_analysis", {})
+        refactoring = analysis_result.get("refactoring_suggestions", {})
+        patterns = analysis_result.get("pattern_analysis", {})
+        
+        overall_score = code_quality.get("overall_score", 0)
+        print(f"   Code Quality Score: {overall_score}/100")
+        
+        perf_score = performance.get("performance_score", 0)
+        print(f"   Performance Score: {perf_score}/100")
+        
+        issues = code_quality.get("issues", [])
+        if issues:
+            print(f"   🔍 Quality Issues ({len(issues)}):")
+            for issue in issues[:3]:  # Show first 3 issues
+                severity = issue.get("severity", "unknown")
+                message = issue.get("message", "Unknown issue")
+                print(f"      {severity.upper()}: {message}")
+            if len(issues) > 3:
+                print(f"      ... and {len(issues) - 3} more issues")
+        
+        suggestions = refactoring.get("priority_suggestions", [])
+        if suggestions:
+            print(f"   💡 Refactoring Suggestions ({len(suggestions)}):")
+            for suggestion in suggestions[:2]:  # Show first 2 suggestions
+                print(f"      • {suggestion.get('suggestion', 'Unknown suggestion')}")
+            if len(suggestions) > 2:
+                print(f"      ... and {len(suggestions) - 2} more suggestions")
+    
+    def _verbose_log_final_implementation(self, implementation: Dict[str, Any], cycle_result: Dict[str, Any]):
+        """Log the final implementation details in verbose mode."""
+        print("\n" + "="*60)
+        print("🎯 FINAL IMPLEMENTATION SUMMARY")
+        print("="*60)
+        
+        # Normalize implementation format
+        normalized_impl = self._normalize_implementation_format(implementation)
+        
+        main_code = normalized_impl.get("main_module", "")
+        test_code = normalized_impl.get("test_module", "")
+        dependencies = normalized_impl.get("dependencies", [])
+        service_name = normalized_impl.get("service_name", "unknown")
+        
+        print(f"📦 Service Name: {service_name}")
+        print(f"📚 Dependencies: {', '.join(dependencies) if dependencies else 'None'}")
+        print(f"📊 Final Quality Score: {cycle_result.get('final_quality_score', 0)}/100")
+        print(f"🔄 Iterations Completed: {len(cycle_result.get('iterations', []))}")
+        print(f"✅ Success: {'Yes' if cycle_result.get('success', False) else 'No'}")
+        
+        if main_code:
+            lines = len(main_code.split('\n'))
+            print(f"📝 Main Code: {lines} lines")
+            print("\n🔍 Final Main Code:")
+            self._verbose_log("", main_code, max_lines=30)
+        
+        if test_code and test_code.strip() != "# No tests generated":
+            test_lines = len(test_code.split('\n'))
+            print(f"🧪 Test Code: {test_lines} lines")
+            print("\n🔍 Final Test Code:")
+            self._verbose_log("", test_code, max_lines=15)
+        
+        # Show what should be written to files
+        print("\n📁 Files that should be generated:")
+        main_lines = len(main_code.split('\n')) if main_code else 0
+        print(f"   • {service_name}.py ({main_lines} lines)")
+        if test_code and test_code.strip() != "# No tests generated":
+            test_lines = len(test_code.split('\n'))
+            print(f"   • test_{service_name}.py ({test_lines} lines)")
+        if dependencies:
+            print(f"   • requirements.txt ({len(dependencies)} dependencies)")
+        
+        print("="*60)
         
     async def initialize(self):
         """Initialize all MCP servers."""
@@ -122,7 +250,7 @@ class IterativeOrchestrator:
             cycle_result["iterations"].append(iteration_result)
             
             if iteration_result["success"]:
-                current_implementation = iteration_result["implementation"]
+                current_implementation = self._normalize_implementation_format(iteration_result["implementation"])
                 current_quality_score = iteration_result["quality_score"]
                 
                 self.logger.log_iteration_complete(
@@ -159,6 +287,10 @@ class IterativeOrchestrator:
                 
         # Generate cycle summary
         cycle_result["cycle_summary"] = self._generate_cycle_summary(cycle_result)
+        
+        # Verbose logging: Show final implementation
+        if self.verbose and current_implementation:
+            self._verbose_log_final_implementation(current_implementation, cycle_result)
         
         self.logger.info(f"Iterative development cycle completed. Success: {cycle_result['success']}",
                        extra_data={
@@ -221,6 +353,29 @@ class IterativeOrchestrator:
                 implementation = impl_result["implementation"]
                 iteration_result["implementation"] = implementation
                 
+                # Verbose logging: Show generated code
+                normalized_impl = self._normalize_implementation_format(implementation)
+                main_code = normalized_impl.get("main_module", "")
+                test_code = normalized_impl.get("test_module", "")
+                
+                self._verbose_log(
+                    f"Generated implementation in iteration {iteration_number}",
+                    main_code
+                )
+                
+                if test_code:
+                    self._verbose_log(
+                        f"Generated tests in iteration {iteration_number}", 
+                        test_code
+                    )
+                
+                # Log dependencies and metadata
+                if self.verbose:
+                    deps = normalized_impl.get("dependencies", [])
+                    service_name = normalized_impl.get("service_name", "unknown")
+                    print(f"📦 Dependencies: {deps}")
+                    print(f"🏷️  Service name: {service_name}")
+                
                 # Log code generation metrics
                 if isinstance(implementation, dict) and "main_module" in implementation:
                     lines_count = len(implementation["main_module"].split('\n'))
@@ -238,6 +393,10 @@ class IterativeOrchestrator:
                 
                 test_result = await self._run_comprehensive_tests(implementation)
                 iteration_result["test_results"] = test_result
+                
+                # Verbose logging: Show test results
+                if self.verbose:
+                    self._verbose_log_test_results(test_result, iteration_number)
             
             # Phase 3: Analyze Code Quality
             with self.logger.timed_operation(f"iteration_{iteration_number}_phase_3_analysis", 
@@ -246,6 +405,10 @@ class IterativeOrchestrator:
                 
                 analysis_result = await self._analyze_implementation_quality(implementation)
                 iteration_result["analysis_results"] = analysis_result
+                
+                # Verbose logging: Show analysis results
+                if self.verbose:
+                    self._verbose_log_analysis_results(analysis_result, iteration_number)
             
             # Phase 4: Calculate Quality Score and Determine Next Steps
             quality_score = self._calculate_iteration_quality_score(test_result, analysis_result)
@@ -265,6 +428,12 @@ class IterativeOrchestrator:
                 )
                 iteration_result["improvements"] = improvements
                 iteration_result["issues_addressed"] = issues_addressed
+                
+                # Verbose logging: Show improvements
+                if self.verbose and improvements:
+                    print(f"🚀 Improvements in Iteration {iteration_number}:")
+                    for improvement in improvements:
+                        print(f"   • {improvement}")
             
             iteration_result["success"] = True
             

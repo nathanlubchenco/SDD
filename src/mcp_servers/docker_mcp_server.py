@@ -20,8 +20,8 @@ class DockerMCPServer(BaseMCPServer):
     with intelligent, adaptive container configuration.
     """
 
-    def __init__(self):
-        super().__init__("docker-server", "1.0.0")
+    def __init__(self, show_prompts: bool = False):
+        super().__init__("docker-server", "1.0.0", show_prompts=show_prompts)
         
     def _register_capabilities(self):
         """Register Docker-related tools, resources, and prompts."""

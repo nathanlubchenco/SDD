@@ -24,8 +24,8 @@ class ImplementationMCPServer(BaseMCPServer):
     and managing the iterative development process.
     """
 
-    def __init__(self, workspace_dir: Optional[Path] = None):
-        super().__init__("implementation-server", "1.0.0")
+    def __init__(self, workspace_dir: Optional[Path] = None, show_prompts: bool = False):
+        super().__init__("implementation-server", "1.0.0", show_prompts=show_prompts)
         self.workspace_dir = workspace_dir or Path("workspaces")
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.active_workspaces = {}
@@ -215,6 +215,7 @@ class ImplementationMCPServer(BaseMCPServer):
         """Generate initial implementation from scenarios and constraints."""
         
         if not self.ai_client:
+            self.logger.warning("AI client not available, using enhanced fallback")
             return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
 
         # Build comprehensive prompt for implementation generation
@@ -223,11 +224,15 @@ class ImplementationMCPServer(BaseMCPServer):
         )
 
         try:
+            self._log_prompt("generate_implementation", prompt)
+            
             response = self.ai_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=4000
             )
+            
+            self._log_prompt("generate_implementation", prompt, response)
 
             implementation = self._parse_implementation_response(response, include_tests)
             
@@ -304,11 +309,15 @@ class ImplementationMCPServer(BaseMCPServer):
         )
 
         try:
+            self._log_prompt("refine_implementation", prompt)
+            
             response = self.ai_client.chat_completion(
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.1,
                 max_tokens=4000
             )
+            
+            self._log_prompt("refine_implementation", prompt, response)
 
             refined_implementation = self._parse_implementation_response(response, include_tests=True)
             
@@ -547,7 +556,9 @@ Return optimized code in JSON format:
         ])
 
         return f"""
-You are an expert Python developer. Generate a complete, production-ready implementation based on these specifications:
+You are an expert Python developer. Generate a complete, WORKING Python implementation based on these specifications.
+
+CRITICAL: Generate ACTUAL EXECUTABLE PYTHON CODE, not placeholders, filenames, or descriptions.
 
 BEHAVIORAL SCENARIOS:
 {scenarios_text}
@@ -558,19 +569,24 @@ CONSTRAINTS:
 FRAMEWORK: {framework}
 OPTIMIZATION LEVEL: {optimization_level}
 
-Requirements:
-1. Generate clean, well-structured Python code
-2. Include comprehensive type hints
-3. Add detailed docstrings for all classes and methods
-4. Implement proper error handling
-5. Follow {framework} best practices if applicable
-6. Include comprehensive test code using pytest
-7. Make the code {optimization_level} for the specified optimization level
+MANDATORY REQUIREMENTS:
+1. The "main_module" field MUST contain complete, executable Python code (classes, functions, imports)
+2. The "test_module" field MUST contain complete, runnable pytest test code
+3. NO placeholders like "main_module.py", "implementation code here", or "# TODO"
+4. Generate REAL imports, REAL class definitions, REAL function implementations
+5. Include comprehensive type hints and docstrings
+6. Implement proper error handling
+7. Follow {framework} best practices if applicable
+8. Make the code {optimization_level} for the specified optimization level
+
+EXAMPLE OF WHAT TO GENERATE:
+- main_module: "from typing import Dict\\nimport json\\n\\nclass DataService:\\n    def __init__(self):\\n        self.data = {{}}\\n..."
+- test_module: "import pytest\\nfrom main import DataService\\n\\ndef test_data_service():\\n    service = DataService()\\n..."
 
 Return your implementation in this JSON format:
 {{
-  "main_module": "complete Python implementation code",
-  "test_module": "comprehensive pytest test code",
+  "main_module": "COMPLETE EXECUTABLE PYTHON CODE HERE",
+  "test_module": "COMPLETE EXECUTABLE PYTEST CODE HERE", 
   "dependencies": ["list", "of", "required", "packages"],
   "service_name": "suggested service name",
   "module_name": "main module name",
@@ -579,7 +595,7 @@ Return your implementation in this JSON format:
   "api_endpoints": ["list", "of", "endpoints", "if", "applicable"]
 }}
 
-Generate high-quality, production-ready code that fully implements all scenarios.
+CRITICAL: Ensure main_module and test_module contain ACTUAL WORKING PYTHON CODE that can be saved to .py files and executed immediately.
 """
 
     def _build_refinement_prompt(self,
@@ -594,6 +610,8 @@ Generate high-quality, production-ready code that fully implements all scenarios
         
         return f"""
 You are an expert Python developer. Refine this implementation to address the identified issues and improve quality.
+
+CRITICAL: Generate ACTUAL EXECUTABLE PYTHON CODE, not placeholders, filenames, or descriptions.
 
 CURRENT IMPLEMENTATION:
 ```python
@@ -617,26 +635,29 @@ REFACTORING SUGGESTIONS:
 TARGET QUALITY SCORE: {target_quality_score}/100
 PRESERVE FUNCTIONALITY: {preserve_functionality}
 
-Instructions:
-1. Fix all test failures while preserving functionality
-2. Address all quality issues (complexity, readability, maintainability)
-3. Apply relevant refactoring suggestions
-4. Improve code structure and design patterns
-5. Enhance error handling and edge cases
-6. Optimize for the target quality score
-7. Update tests to match any interface changes
+MANDATORY REQUIREMENTS:
+1. The "main_module" field MUST contain complete, executable Python code
+2. The "test_module" field MUST contain complete, runnable pytest test code  
+3. NO placeholders like "refined Python implementation", "updated test code", or "# TODO"
+4. Generate REAL improvements to the existing code
+5. Fix all test failures while preserving functionality
+6. Address all quality issues (complexity, readability, maintainability)
+7. Apply relevant refactoring suggestions
+8. Improve code structure and design patterns
+9. Enhance error handling and edge cases
+10. Update tests to match any interface changes
 
 Return the refined implementation in JSON format:
 {{
-  "main_module": "refined Python implementation",
-  "test_module": "updated test code",
+  "main_module": "COMPLETE EXECUTABLE PYTHON CODE HERE",
+  "test_module": "COMPLETE EXECUTABLE PYTEST CODE HERE",
   "dependencies": ["updated", "dependencies"],
   "improvements_made": ["list", "of", "improvements"],
   "issues_fixed": ["list", "of", "fixed", "issues"],
   "quality_enhancements": ["list", "of", "quality", "improvements"]
 }}
 
-Focus on creating high-quality, maintainable code that meets the target quality score.
+CRITICAL: Ensure main_module and test_module contain ACTUAL WORKING PYTHON CODE that can be saved to .py files and executed immediately.
 """
 
     def _parse_implementation_response(self, response: str, include_tests: bool = True) -> Dict[str, Any]:
@@ -647,14 +668,28 @@ Focus on creating high-quality, maintainable code that meets the target quality 
                 start = response.find("```json") + 7
                 end = response.find("```", start)
                 json_text = response[start:end].strip()
+            elif "{" in response and "}" in response:
+                # Try to find JSON-like content in the response
+                start = response.find("{")
+                end = response.rfind("}") + 1
+                json_text = response[start:end].strip()
             else:
                 json_text = response.strip()
 
             data = json.loads(json_text)
             
-            # Ensure required fields
+            # Ensure required fields and validate that we have actual code, not placeholders
+            main_module = data.get("main_module", "")
+            if not main_module or main_module in ["main_module.py", "main_module", "# No implementation generated"]:
+                self.logger.warning("AI generated placeholder content instead of actual code")
+                main_module = self._generate_fallback_code_from_scenarios(data.get("scenarios", []))
+            
+            test_module = data.get("test_module", "")
+            if include_tests and (not test_module or test_module in ["test_module.py", "test_module", "# No tests generated"]):
+                test_module = self._generate_fallback_tests(main_module)
+            
             implementation = {
-                "main_module": data.get("main_module", "# No implementation generated"),
+                "main_module": main_module,
                 "dependencies": data.get("dependencies", ["pytest"]),
                 "service_name": data.get("service_name", "generated_service"),
                 "module_name": data.get("module_name", "main"),
@@ -663,7 +698,7 @@ Focus on creating high-quality, maintainable code that meets the target quality 
             }
 
             if include_tests:
-                implementation["test_module"] = data.get("test_module", "# No tests generated")
+                implementation["test_module"] = test_module
 
             if "api_endpoints" in data:
                 implementation["api_endpoints"] = data["api_endpoints"]
@@ -671,7 +706,7 @@ Focus on creating high-quality, maintainable code that meets the target quality 
             return implementation
 
         except (json.JSONDecodeError, KeyError) as e:
-            self.logger.warning(f"Failed to parse implementation response: {e}")
+            self.logger.warning(f"Failed to parse implementation response: {e}. Response: {response[:200]}...")
             return self._fallback_implementation_structure()
 
     def _parse_code_generation_response(self, response: str) -> Dict[str, Any]:
@@ -726,29 +761,166 @@ Focus on creating high-quality, maintainable code that meets the target quality 
     def _fallback_implementation_structure(self) -> Dict[str, Any]:
         """Basic fallback implementation structure."""
         return {
-            "main_module": """
-# Basic implementation template
-class Service:
-    def __init__(self):
-        pass
-    
-    def process(self, data):
-        return {"status": "processed", "data": data}
-""",
-            "test_module": """
-import pytest
-from main import Service
+            "main_module": '''\
+# Basic CRUD implementation template
+from typing import Dict, List, Optional, Any
+import json
 
-def test_service():
-    service = Service()
-    result = service.process({"test": "data"})
-    assert result["status"] == "processed"
-""",
+class DataStore:
+    """Simple in-memory data store for CRUD operations."""
+    
+    def __init__(self):
+        self._data: Dict[str, Any] = {}
+        self._next_id = 1
+    
+    def create(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Store new data and return it with an ID."""
+        item_id = str(self._next_id)
+        self._next_id += 1
+        
+        item = {"id": item_id, **data}
+        self._data[item_id] = item
+        return item
+    
+    def read(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve data by ID."""
+        return self._data.get(item_id)
+    
+    def update(self, item_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update existing data."""
+        if item_id in self._data:
+            self._data[item_id].update(data)
+            return self._data[item_id]
+        return None
+    
+    def delete(self, item_id: str) -> bool:
+        """Remove data by ID."""
+        if item_id in self._data:
+            del self._data[item_id]
+            return True
+        return False
+    
+    def list_all(self) -> List[Dict[str, Any]]:
+        """Get all stored data."""
+        return list(self._data.values())
+
+# Example usage
+if __name__ == "__main__":
+    store = DataStore()
+    
+    # Create
+    item = store.create({"name": "test", "value": 42})
+    print(f"Created: {item}")
+    
+    # Read
+    retrieved = store.read(item["id"])
+    print(f"Retrieved: {retrieved}")
+    
+    # Update
+    updated = store.update(item["id"], {"value": 100})
+    print(f"Updated: {updated}")
+    
+    # List all
+    all_items = store.list_all()
+    print(f"All items: {all_items}")
+    
+    # Delete
+    deleted = store.delete(item["id"])
+    print(f"Deleted: {deleted}")
+''',
+            "test_module": '''\
+import pytest
+from main import DataStore
+
+class TestDataStore:
+    """Test cases for DataStore CRUD operations."""
+    
+    def setup_method(self):
+        """Set up test fixtures before each test method."""
+        self.store = DataStore()
+    
+    def test_create_item(self):
+        """Test creating a new item."""
+        data = {"name": "test_item", "value": 42}
+        item = self.store.create(data)
+        
+        assert "id" in item
+        assert item["name"] == "test_item"
+        assert item["value"] == 42
+    
+    def test_read_existing_item(self):
+        """Test reading an existing item."""
+        # Create an item first
+        created = self.store.create({"name": "test"})
+        
+        # Read it back
+        retrieved = self.store.read(created["id"])
+        
+        assert retrieved is not None
+        assert retrieved["id"] == created["id"]
+        assert retrieved["name"] == "test"
+    
+    def test_read_nonexistent_item(self):
+        """Test reading a non-existent item."""
+        result = self.store.read("nonexistent")
+        assert result is None
+    
+    def test_update_existing_item(self):
+        """Test updating an existing item."""
+        # Create an item
+        created = self.store.create({"name": "original", "value": 1})
+        
+        # Update it
+        updated = self.store.update(created["id"], {"name": "updated", "value": 2})
+        
+        assert updated is not None
+        assert updated["name"] == "updated"
+        assert updated["value"] == 2
+        assert updated["id"] == created["id"]
+    
+    def test_update_nonexistent_item(self):
+        """Test updating a non-existent item."""
+        result = self.store.update("nonexistent", {"name": "test"})
+        assert result is None
+    
+    def test_delete_existing_item(self):
+        """Test deleting an existing item."""
+        # Create an item
+        created = self.store.create({"name": "to_delete"})
+        
+        # Delete it
+        result = self.store.delete(created["id"])
+        assert result is True
+        
+        # Verify it's gone
+        retrieved = self.store.read(created["id"])
+        assert retrieved is None
+    
+    def test_delete_nonexistent_item(self):
+        """Test deleting a non-existent item."""
+        result = self.store.delete("nonexistent")
+        assert result is False
+    
+    def test_list_all_items(self):
+        """Test listing all items."""
+        # Start with empty store
+        assert self.store.list_all() == []
+        
+        # Add some items
+        item1 = self.store.create({"name": "first"})
+        item2 = self.store.create({"name": "second"})
+        
+        # List all
+        all_items = self.store.list_all()
+        assert len(all_items) == 2
+        assert item1 in all_items
+        assert item2 in all_items
+''',
             "dependencies": ["pytest"],
-            "service_name": "basic_service",
+            "service_name": "data_store_service",
             "module_name": "main",
-            "key_classes": ["Service"],
-            "key_functions": ["process"]
+            "key_classes": ["DataStore"],
+            "key_functions": ["create", "read", "update", "delete", "list_all"]
         }
 
     # Template initialization methods
@@ -820,6 +992,406 @@ setup(
                     exports.append(class_name)
                     
         return exports
+
+    def _generate_fallback_code_from_scenarios(self, scenarios: List[Dict[str, Any]]) -> str:
+        """Generate basic implementation code from scenarios when AI fails."""
+        
+        # If no scenarios provided, return basic CRUD
+        if not scenarios:
+            return self._fallback_implementation_structure()["main_module"]
+        
+        # Analyze scenarios to determine what kind of implementation to generate
+        scenario_text = " ".join([
+            f"{s.get('scenario', '')} {s.get('when', '')} {s.get('then', '')}"
+            for s in scenarios
+        ]).lower()
+        
+        if any(keyword in scenario_text for keyword in ['store', 'create', 'add', 'save']):
+            # CRUD-like scenarios detected
+            return self._generate_crud_implementation(scenarios)
+        elif any(keyword in scenario_text for keyword in ['api', 'endpoint', 'request', 'response']):
+            # API scenarios detected
+            return self._generate_api_implementation(scenarios)
+        else:
+            # Generic service scenarios
+            return self._generate_service_implementation(scenarios)
+    
+    def _generate_fallback_tests(self, main_module: str) -> str:
+        """Generate basic tests for the main module."""
+        # Extract class names from the main module
+        classes = []
+        functions = []
+        try:
+            tree = ast.parse(main_module)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    classes.append(node.name)
+                elif isinstance(node, ast.FunctionDef) and not node.name.startswith('_'):
+                    functions.append(node.name)
+        except SyntaxError:
+            # Fallback if AST parsing fails
+            lines = main_module.split('\n')
+            for line in lines:
+                if line.strip().startswith('class '):
+                    class_name = line.split('class ')[1].split('(')[0].split(':')[0].strip()
+                    classes.append(class_name)
+                elif line.strip().startswith('def ') and not line.strip().startswith('def _'):
+                    func_name = line.split('def ')[1].split('(')[0].strip()
+                    functions.append(func_name)
+        
+        # Generate basic tests
+        test_code = "import pytest\n"
+        if classes:
+            test_code += f"from main import {', '.join(classes)}\n\n"
+        
+        for class_name in classes:
+            test_code += f"""
+class Test{class_name}:
+    \"\"\"Test cases for {class_name}.\"\"\\"
+    
+    def setup_method(self):
+        \"\"\"Set up test fixtures.\"\"\"
+        self.instance = {class_name}()
+    
+    def test_instantiation(self):
+        \"\"\"Test that {class_name} can be instantiated.\"\"\"
+        assert self.instance is not None
+        assert isinstance(self.instance, {class_name})
+"""
+        
+        for func_name in functions:
+            test_code += f"""
+def test_{func_name}():
+    \"\"\"Test {func_name} function.\"\"\"
+    # TODO: Add specific test logic for {func_name}
+    assert True  # Placeholder test
+"""
+        
+        return test_code.strip()
+    
+    def _generate_crud_implementation(self, scenarios: List[Dict[str, Any]]) -> str:
+        """Generate CRUD implementation based on scenarios."""
+        return '''\
+from typing import Dict, List, Optional, Any
+import json
+from datetime import datetime
+
+class DataManager:
+    """Enhanced data management with CRUD operations."""
+    
+    def __init__(self):
+        self._storage: Dict[str, Any] = {}
+        self._next_id = 1
+        self._created_at = datetime.now()
+    
+    def create_item(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new item and store it."""
+        if not data:
+            raise ValueError("Data cannot be empty")
+        
+        item_id = str(self._next_id)
+        self._next_id += 1
+        
+        item = {
+            "id": item_id,
+            "created_at": datetime.now().isoformat(),
+            **data
+        }
+        
+        self._storage[item_id] = item
+        return item
+    
+    def get_item(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieve an item by ID."""
+        return self._storage.get(item_id)
+    
+    def update_item(self, item_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update an existing item."""
+        if item_id not in self._storage:
+            return None
+        
+        item = self._storage[item_id]
+        item.update(updates)
+        item["updated_at"] = datetime.now().isoformat()
+        
+        return item
+    
+    def delete_item(self, item_id: str) -> bool:
+        """Delete an item by ID."""
+        if item_id in self._storage:
+            del self._storage[item_id]
+            return True
+        return False
+    
+    def list_items(self) -> List[Dict[str, Any]]:
+        """Get all items."""
+        return list(self._storage.values())
+    
+    def search_items(self, query: str) -> List[Dict[str, Any]]:
+        """Search items by query string."""
+        results = []
+        query_lower = query.lower()
+        
+        for item in self._storage.values():
+            # Search in all string values
+            for value in item.values():
+                if isinstance(value, str) and query_lower in value.lower():
+                    results.append(item)
+                    break
+        
+        return results
+
+# Example usage
+if __name__ == "__main__":
+    manager = DataManager()
+    
+    # Create items
+    item1 = manager.create_item({"name": "Sample Item", "category": "test"})
+    item2 = manager.create_item({"name": "Another Item", "category": "demo"})
+    
+    print(f"Created items: {[item1['id'], item2['id']]}")
+    
+    # Read item
+    retrieved = manager.get_item(item1["id"])
+    print(f"Retrieved: {retrieved}")
+    
+    # Update item
+    updated = manager.update_item(item1["id"], {"status": "active"})
+    print(f"Updated: {updated}")
+    
+    # List all
+    all_items = manager.list_items()
+    print(f"Total items: {len(all_items)}")
+    
+    # Search
+    search_results = manager.search_items("Sample")
+    print(f"Search results: {len(search_results)}")
+        '''.strip()
+    
+    def _generate_api_implementation(self, scenarios: List[Dict[str, Any]]) -> str:
+        """Generate API implementation based on scenarios."""
+        return '''\
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict, List, Optional, Any
+import uvicorn
+
+app = FastAPI(title="Generated API", version="1.0.0")
+
+# Data models
+class ItemCreate(BaseModel):
+    name: str
+    data: Dict[str, Any] = {}
+
+class ItemResponse(BaseModel):
+    id: str
+    name: str
+    data: Dict[str, Any]
+    created_at: str
+
+class ItemUpdate(BaseModel):
+    name: Optional[str] = None
+    data: Optional[Dict[str, Any]] = None
+
+# In-memory storage
+storage: Dict[str, Dict[str, Any]] = {}
+next_id = 1
+
+@app.get("/")
+async def root():
+    """Health check endpoint."""
+    return {"message": "API is running", "status": "healthy"}
+
+@app.post("/items/", response_model=ItemResponse)
+async def create_item(item: ItemCreate):
+    """Create a new item."""
+    global next_id
+    
+    item_id = str(next_id)
+    next_id += 1
+    
+    from datetime import datetime
+    new_item = {
+        "id": item_id,
+        "name": item.name,
+        "data": item.data,
+        "created_at": datetime.now().isoformat()
+    }
+    
+    storage[item_id] = new_item
+    return ItemResponse(**new_item)
+
+@app.get("/items/{item_id}", response_model=ItemResponse)
+async def get_item(item_id: str):
+    """Get an item by ID."""
+    if item_id not in storage:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    return ItemResponse(**storage[item_id])
+
+@app.put("/items/{item_id}", response_model=ItemResponse)
+async def update_item(item_id: str, updates: ItemUpdate):
+    """Update an existing item."""
+    if item_id not in storage:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    item = storage[item_id]
+    
+    if updates.name is not None:
+        item["name"] = updates.name
+    if updates.data is not None:
+        item["data"] = updates.data
+    
+    from datetime import datetime
+    item["updated_at"] = datetime.now().isoformat()
+    
+    return ItemResponse(**item)
+
+@app.delete("/items/{item_id}")
+async def delete_item(item_id: str):
+    """Delete an item."""
+    if item_id not in storage:
+        raise HTTPException(status_code=404, detail="Item not found")
+    
+    del storage[item_id]
+    return {"message": "Item deleted successfully"}
+
+@app.get("/items/", response_model=List[ItemResponse])
+async def list_items():
+    """List all items."""
+    return [ItemResponse(**item) for item in storage.values()]
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+        '''.strip()
+    
+    def _generate_service_implementation(self, scenarios: List[Dict[str, Any]]) -> str:
+        """Generate generic service implementation based on scenarios."""
+        return '''\
+from typing import Dict, List, Any, Optional
+import logging
+from datetime import datetime
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class ProcessingService:
+    """Generic service for processing data based on scenarios."""
+    
+    def __init__(self):
+        self.state: Dict[str, Any] = {}
+        self.history: List[Dict[str, Any]] = []
+        self.initialized_at = datetime.now()
+        logger.info("ProcessingService initialized")
+    
+    def process_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Process incoming request data."""
+        try:
+            logger.info(f"Processing request: {request_data}")
+            
+            # Record the request in history
+            request_record = {
+                "timestamp": datetime.now().isoformat(),
+                "request": request_data,
+                "status": "processing"
+            }
+            self.history.append(request_record)
+            
+            # Basic processing logic
+            result = self._perform_processing(request_data)
+            
+            # Update status
+            request_record["status"] = "completed"
+            request_record["result"] = result
+            
+            logger.info(f"Request processed successfully: {result}")
+            return {
+                "success": True,
+                "result": result,
+                "timestamp": request_record["timestamp"]
+            }
+            
+        except Exception as e:
+            logger.error(f"Processing failed: {e}")
+            if self.history:
+                self.history[-1]["status"] = "failed"
+                self.history[-1]["error"] = str(e)
+            
+            return {
+                "success": False,
+                "error": str(e),
+                "timestamp": datetime.now().isoformat()
+            }
+    
+    def _perform_processing(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Perform the actual processing logic."""
+        # Update internal state
+        if "state_updates" in data:
+            self.state.update(data["state_updates"])
+        
+        # Generate response based on input
+        processed_data = {}
+        
+        for key, value in data.items():
+            if isinstance(value, str):
+                processed_data[f"processed_{key}"] = value.upper()
+            elif isinstance(value, (int, float)):
+                processed_data[f"processed_{key}"] = value * 2
+            else:
+                processed_data[f"processed_{key}"] = f"Processed: {value}"
+        
+        return {
+            "input_data": data,
+            "processed_data": processed_data,
+            "state_snapshot": self.state.copy(),
+            "processing_time": datetime.now().isoformat()
+        }
+    
+    def get_status(self) -> Dict[str, Any]:
+        """Get current service status."""
+        return {
+            "status": "running",
+            "initialized_at": self.initialized_at.isoformat(),
+            "requests_processed": len(self.history),
+            "current_state": self.state.copy(),
+            "last_activity": self.history[-1]["timestamp"] if self.history else None
+        }
+    
+    def get_history(self, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get processing history."""
+        return self.history[-limit:] if self.history else []
+    
+    def reset_state(self) -> Dict[str, Any]:
+        """Reset service state."""
+        old_state = self.state.copy()
+        self.state.clear()
+        logger.info("Service state reset")
+        
+        return {
+            "message": "State reset successfully",
+            "previous_state": old_state,
+            "reset_at": datetime.now().isoformat()
+        }
+
+# Example usage
+if __name__ == "__main__":
+    service = ProcessingService()
+    
+    # Example request processing
+    test_data = {
+        "name": "test_request",
+        "value": 42,
+        "action": "process",
+        "state_updates": {"last_action": "test"}
+    }
+    
+    result = service.process_request(test_data)
+    print(f"Processing result: {result}")
+    
+    status = service.get_status()
+    print(f"Service status: {status}")
+        '''.strip()
 
     # Required abstract method implementations
 
