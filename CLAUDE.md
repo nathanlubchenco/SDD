@@ -36,6 +36,13 @@ pytest tests/mcp/ -v          # MCP server tests
 # Run individual test files
 python tests/integration/test_logging_integration.py
 python tests/mcp/test_specification_mcp.py
+python tests/mcp/test_docker_mcp.py
+
+# Run system demos (no API key required)
+python examples/simple_demo.py
+
+# Run full AI development demo (requires OpenAI API key)
+python examples/iterative_development_demo.py
 
 # Via Docker
 docker-compose run --rm python pytest
@@ -44,16 +51,28 @@ docker-compose run --rm python pytest
 ## Architecture
 
 ### Core Components
-- **src/core/**: Core SDD functionality (constraint verification, performance optimization, scenario validation)
+- **src/core/**: Core SDD functionality (constraint verification, performance optimization, scenario validation, centralized logging via sdd_logger.py)
 - **src/mcp_servers/**: MCP (Model Context Protocol) servers - specialized AI agents for different aspects:
-  - `specification_server.py`: Manages scenarios and constraints
+  - `base_mcp_server.py`: Foundation for all MCP server implementations
+  - `specification_mcp_server.py` & `specification_server.py`: Manages scenarios and constraints
   - `implementation_server.py`: Handles code generation and testing
+  - `testing_mcp_server.py`: Comprehensive testing with structured feedback
+  - `analysis_mcp_server.py`: Code quality analysis and AI-powered suggestions
+  - `docker_mcp_server.py`: AI-driven Docker artifact generation
   - `monitoring_server.py`: Production monitoring and auto-remediation
   - `debugger_server.py`: Behavior-focused debugging
 - **src/orchestrator/**: Coordinates the end-to-end SDD workflow from specification to deployment
 - **examples/**: Real-world examples showing SDD specifications (task_manager, ecommerce_platform)
 - **tests/**: Organized test suite with unit, integration, and MCP tests
+- **workspaces/**: Generated implementations and artifacts from SDD development cycles
+- **archive_deprecated/**: Historical code for reference (not actively maintained)
 - **docs/**: Documentation including architecture, examples, and logging guides
+  - `ARCHITECTURE.md`: Technical deep dive into system design
+  - `EXAMPLES.md`: Detailed examples and patterns  
+  - `ITERATIVE_DEVELOPMENT.md`: Complete development process documentation
+  - `PHILOSOPHY.md`: Why specification-driven development matters
+  - `GETTING_STARTED.md`: Quick start guide
+  - `LOGGING_SUMMARY.md`: Logging integration details
 
 ### Specification Format
 SDD uses YAML-based specifications with two key components:
@@ -109,13 +128,13 @@ export ANTHROPIC_MODEL=claude-3-opus-20240229
 ### Available Commands
 ```bash
 # Show current configuration
-python core/ai_config.py config
+python src/core/ai_config.py config
 
 # List available models
-python core/ai_config.py models
+python src/core/ai_config.py models
 
 # Test connection
-python core/ai_config.py test --provider anthropic --model claude-3-sonnet-20240229
+python src/core/ai_config.py test --provider anthropic --model claude-3-sonnet-20240229
 ```
 
 ## Dependencies
