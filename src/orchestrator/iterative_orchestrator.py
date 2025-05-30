@@ -8,6 +8,7 @@ AI to iteratively improve its own code through testing and analysis feedback.
 import asyncio
 import json
 import logging
+import yaml
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
 from src.mcp_servers.specification_mcp_server import SpecificationMCPServer
@@ -278,30 +279,34 @@ class IterativeOrchestrator:
         return iteration_result
 
     async def _load_specification(self, specification_path: str) -> Dict[str, Any]:
-        """Load and validate specification using SpecificationMCPServer."""
+        """Load and validate specification from YAML file."""
         try:
-            # Use MCP call to get scenarios from specification
-            request = {
-                "method": "tools/call",
-                "params": {
-                    "name": "get_scenarios",
-                    "arguments": {
-                        "specification_path": specification_path,
-                        "include_constraints": True
-                    }
-                }
-            }
+            # Load specification directly from YAML file
+            spec_path = Path(specification_path)
+            if not spec_path.exists():
+                return {"success": False, "error": f"Specification file not found: {specification_path}"}
             
-            response = await self.spec_server.handle_mcp_request(request)
+            with open(spec_path, 'r') as f:
+                specification = yaml.safe_load(f)
             
-            if response.get("error"):
-                return {"success": False, "error": response["error"]}
-                
+            # Validate that it has required structure
+            if not isinstance(specification, dict):
+                return {"success": False, "error": "Specification must be a YAML dictionary"}
+            
+            if "scenarios" not in specification:
+                return {"success": False, "error": "Specification must contain 'scenarios' section"}
+            
+            # Set defaults
+            if "constraints" not in specification:
+                specification["constraints"] = {}
+            
             return {
                 "success": True,
-                "specification": response["result"]["content"]
+                "specification": specification
             }
             
+        except yaml.YAMLError as e:
+            return {"success": False, "error": f"Invalid YAML format: {e}"}
         except Exception as e:
             return {"success": False, "error": str(e)}
 

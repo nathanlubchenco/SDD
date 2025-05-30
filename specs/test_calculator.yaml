@@ -1,0 +1,24 @@
+scenarios:
+  - scenario: Add two numbers
+    given: A calculator service
+    when: User requests addition of 5 and 3
+    then: 
+      - Result is 8
+      - Response time is under 100ms
+
+  - scenario: Handle division by zero
+    given: A calculator service
+    when: User attempts to divide by zero
+    then:
+      - Error message is returned
+      - Service remains stable
+
+constraints:
+  performance:
+    response_time: "< 100ms for basic operations"
+  
+  reliability:
+    error_handling: "Graceful handling of all invalid inputs"
+    
+  security:
+    input_validation: "All inputs must be validated"
