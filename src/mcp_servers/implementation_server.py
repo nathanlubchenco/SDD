@@ -258,20 +258,32 @@ class ImplementationMCPServer(BaseMCPServer):
         if not self.ai_client:
             return {"success": False, "error": "AI client not available for refinement"}
 
-        # Extract current code - handle case where current_implementation might be passed as a list
+        # Extract current code - handle multiple possible formats
         if isinstance(current_implementation, list) and len(current_implementation) > 0:
             # If it's a list, try to get the first element and parse it
             impl_data = current_implementation[0]
             if isinstance(impl_data, dict) and "text" in impl_data:
+                # Handle MCP response format with text field containing string representation
+                text_content = impl_data["text"]
                 try:
-                    current_implementation = json.loads(impl_data["text"])
-                except (json.JSONDecodeError, KeyError):
-                    current_implementation = {}
+                    # First try to parse as JSON
+                    current_implementation = json.loads(text_content)
+                except json.JSONDecodeError:
+                    # If that fails, try to evaluate as Python literal (for string dict representations)
+                    try:
+                        import ast
+                        current_implementation = ast.literal_eval(text_content)
+                    except (ValueError, SyntaxError):
+                        self.logger.warning(f"Failed to parse implementation text: {text_content[:100]}...")
+                        current_implementation = {}
             elif isinstance(impl_data, str):
                 try:
                     current_implementation = json.loads(impl_data)
                 except json.JSONDecodeError:
                     current_implementation = {}
+            elif isinstance(impl_data, dict):
+                # Already a dict, use directly
+                current_implementation = impl_data
         
         # Ensure current_implementation is a dict
         if not isinstance(current_implementation, dict):

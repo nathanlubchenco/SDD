@@ -377,12 +377,20 @@ class IterativeOrchestrator:
             content = response.get("result", {}).get("content", [])
             if isinstance(content, list) and content:
                 try:
-                    implementation = json.loads(content[0].get("text", "{}"))
+                    text_content = content[0].get("text", "{}")
+                    # First try to parse as JSON
+                    try:
+                        implementation = json.loads(text_content)
+                    except json.JSONDecodeError:
+                        # If that fails, try to evaluate as Python literal (for string dict representations)
+                        import ast
+                        implementation = ast.literal_eval(text_content)
+                    
                     return {
                         "success": True,
                         "implementation": implementation
                     }
-                except (json.JSONDecodeError, KeyError):
+                except (json.JSONDecodeError, KeyError, ValueError, SyntaxError):
                     return {"success": False, "error": "Failed to parse implementation response"}
             else:
                 return {"success": False, "error": "No implementation response"}
@@ -641,21 +649,43 @@ class IterativeOrchestrator:
         issues_addressed = []
         
         try:
+            # Normalize implementation formats - handle case where they might be MCP response lists
+            previous_normalized = self._normalize_implementation_format(previous_impl)
+            current_normalized = self._normalize_implementation_format(current_impl)
+            
             # Use AnalysisMCPServer to compare implementations
             request = {
                 "method": "tools/call",
                 "params": {
                     "name": "compare_implementations",
                     "arguments": {
-                        "original_code": previous_impl.get("main_module", ""),
-                        "revised_code": current_impl.get("main_module", ""),
+                        "original_code": previous_normalized.get("main_module", ""),
+                        "revised_code": current_normalized.get("main_module", ""),
                         "comparison_criteria": ["functionality", "readability", "complexity", "performance"]
                     }
                 }
             }
             
             response = await self.analysis_server.handle_mcp_request(request)
-            comparison = response.get("result", {}).get("content", {})
+            
+            # Handle MCP response format - content might be a list
+            content = response.get("result", {}).get("content", {})
+            if isinstance(content, list) and len(content) > 0:
+                # Extract from MCP response format
+                content_item = content[0]
+                if isinstance(content_item, dict) and "text" in content_item:
+                    try:
+                        comparison = json.loads(content_item["text"])
+                    except json.JSONDecodeError:
+                        try:
+                            import ast
+                            comparison = ast.literal_eval(content_item["text"])
+                        except (ValueError, SyntaxError):
+                            comparison = {}
+                else:
+                    comparison = content_item if isinstance(content_item, dict) else {}
+            else:
+                comparison = content if isinstance(content, dict) else {}
             
             improvements = comparison.get("improvements", [])
             
@@ -664,11 +694,41 @@ class IterativeOrchestrator:
                 improvements.append(f"Quality score improved from {previous_score} to {current_score}")
             
         except Exception as e:
-            self.logger.warning(f"Could not compare implementations: {e}")
+            self.logger.error(f"Failed to compare implementations: {e}")
+            # This is a critical error that should be addressed, not silently ignored
             if current_score > previous_score:
                 improvements.append(f"Quality score improved from {previous_score} to {current_score}")
                 
         return improvements, issues_addressed
+    
+    def _normalize_implementation_format(self, implementation: Any) -> Dict[str, Any]:
+        """Normalize implementation to consistent dict format, handling MCP response lists."""
+        if isinstance(implementation, dict):
+            # Already in correct format
+            return implementation
+        elif isinstance(implementation, list) and len(implementation) > 0:
+            # Handle MCP response format
+            impl_data = implementation[0]
+            if isinstance(impl_data, dict) and "text" in impl_data:
+                text_content = impl_data["text"]
+                try:
+                    # Try to parse as JSON first
+                    return json.loads(text_content)
+                except json.JSONDecodeError:
+                    # Try to evaluate as Python literal
+                    try:
+                        import ast
+                        return ast.literal_eval(text_content)
+                    except (ValueError, SyntaxError):
+                        self.logger.error(f"Failed to parse implementation text: {text_content[:100]}...")
+                        return {}
+            elif isinstance(impl_data, dict):
+                # Direct dict in list
+                return impl_data
+        
+        # Fallback for unexpected formats
+        self.logger.error(f"Unexpected implementation format: {type(implementation)}")
+        return {}
 
     async def _generate_docker_artifacts(self, implementation: Dict[str, Any]) -> Dict[str, Any]:
         """Generate Docker artifacts for the final implementation."""
