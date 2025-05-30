@@ -6,6 +6,7 @@ Generate, test, and analyze code using AI-powered iterative development.
 """
 
 import argparse
+import ast
 import asyncio
 import json
 import os
@@ -327,6 +328,21 @@ Examples:
                     # Get the best implementation from iterations
                     for iter_result in reversed(iterations):
                         impl = iter_result.get('implementation')
+                        
+                        # Handle MCP-format responses (list with text content)
+                        if impl and isinstance(impl, list) and impl:
+                            try:
+                                impl_text = impl[0].get('text', '{}')
+                                # Try JSON first, then ast.literal_eval for Python dict format
+                                try:
+                                    impl = json.loads(impl_text)
+                                except json.JSONDecodeError:
+                                    impl = ast.literal_eval(impl_text)
+                            except (json.JSONDecodeError, ValueError, KeyError, IndexError, SyntaxError):
+                                if not args.quiet:
+                                    print(f"⚠️  Could not parse implementation from MCP response")
+                                continue
+                        
                         if impl and isinstance(impl, dict):
                             try:
                                 # Write main module

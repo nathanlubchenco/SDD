@@ -1,0 +1,23 @@
+
+feature: "a basic system to store and retrieve data"
+description: "basically what most of the internet runs on"
+
+scenarios:
+  - name: "store"
+    when: "a user adds data"
+    then: "it is persisted to a data store"
+
+  - name: "get" 
+    given: "a piece of data has already been stored"
+    when: "a user gets data"
+    then: "it is returned to the user"
+  
+  - name: "update" 
+    given: "a piece of data has already been stored"
+    when: "a user updates data"
+    then: "the changes to the data are persisted" 
+
+  - name: "delete" 
+    given: "a piece of data has already been stored"
+    when: "a user deletes data"
+    then: "the data is removed from the data store" 

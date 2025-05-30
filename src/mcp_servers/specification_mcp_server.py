@@ -24,10 +24,13 @@ class SpecificationMCPServer(BaseMCPServer):
     def __init__(self, spec_directory: Path):
         self.spec_dir = spec_directory
         self.spec_dir.mkdir(parents=True, exist_ok=True)
-        self.specs = self._load_specifications()
         self.scenario_cache = {}
         
+        # Initialize parent class first to set up logger
         super().__init__("specification-server", "1.0.0")
+        
+        # Now load specifications with logger available
+        self.specs = self._load_specifications()
         
     def _register_capabilities(self):
         """Register specification-related tools, resources, and prompts."""
