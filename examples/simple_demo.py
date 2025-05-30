@@ -14,7 +14,7 @@ from pathlib import Path
 # Add SDD to Python path
 sys.path.append(str(Path(__file__).parent.parent))
 
-from orchestrator.iterative_orchestrator import IterativeOrchestrator
+from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
 
 
 async def demo_system_architecture():

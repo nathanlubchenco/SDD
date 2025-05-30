@@ -12,9 +12,9 @@ from pathlib import Path
 import sys
 
 # Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from mcp_servers.specification_mcp_server import SpecificationMCPServer
+from src.mcp_servers.specification_mcp_server import SpecificationMCPServer
 
 
 async def test_specification_mcp_server():

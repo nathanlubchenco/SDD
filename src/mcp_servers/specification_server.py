@@ -3,7 +3,7 @@ import asyncio
 from typing import Dict, List, Optional
 from pathlib import Path
 import yaml
-from core.sdd_logger import get_logger
+from src.core.sdd_logger import get_logger
 
 
 class SpecificationMCPServer:

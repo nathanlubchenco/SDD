@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-from core.sdd_logger import get_logger
+from src.core.sdd_logger import get_logger
 
 
 class ConstraintVerifier:

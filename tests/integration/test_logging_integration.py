@@ -12,14 +12,14 @@ import tempfile
 from pathlib import Path
 
 # Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from core.sdd_logger import configure_logging, get_sdd_logger
-from mcp_servers.specification_mcp_server import SpecificationMCPServer
-from mcp_servers.implementation_server import ImplementationMCPServer
-from orchestrator.iterative_orchestrator import IterativeOrchestrator
-from core.constraint_verifier import ConstraintVerifier
-from core.performance_optimizer import PerformanceOptimizer
+from src.core.sdd_logger import configure_logging, get_sdd_logger
+from src.mcp_servers.specification_mcp_server import SpecificationMCPServer
+from src.mcp_servers.implementation_server import ImplementationMCPServer
+from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
+from src.core.constraint_verifier import ConstraintVerifier
+from src.core.performance_optimizer import PerformanceOptimizer
 
 
 async def test_logging_integration():

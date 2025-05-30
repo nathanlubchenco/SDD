@@ -11,9 +11,9 @@ from pathlib import Path
 import sys
 
 # Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from orchestrator.mcp_orchestrator import MCPOrchestrator
+from src.orchestrator.mcp_orchestrator import MCPOrchestrator
 
 
 async def test_mcp_orchestrator():

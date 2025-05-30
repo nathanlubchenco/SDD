@@ -113,7 +113,7 @@ constraints:
 Generate the implementation:
 
 ```python
-from orchestrator.iterative_orchestrator import IterativeOrchestrator
+from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
 
 # Initialize the orchestrator
 orchestrator = IterativeOrchestrator("workspaces/my_service", max_iterations=5)
@@ -136,7 +136,7 @@ print(f"Iterations: {len(result['iterations'])}")
 Test and improve any Python code:
 
 ```python
-from orchestrator.iterative_orchestrator import IterativeOrchestrator
+from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
 
 orchestrator = IterativeOrchestrator("workspace", max_iterations=3)
 await orchestrator.initialize()
@@ -167,6 +167,11 @@ print(f"Refined score: {result.get('refined_quality_score')}")
 # Test basic system functionality (no API key required)
 python -m pytest tests/ -v
 
+# Run specific test categories
+python -m pytest tests/unit/ -v          # Unit tests
+python -m pytest tests/integration/ -v   # Integration tests  
+python -m pytest tests/mcp/ -v          # MCP server tests
+
 # Demo the system architecture (no API key required)
 python examples/simple_demo.py
 
@@ -177,6 +182,20 @@ python examples/iterative_development_demo.py
 # Test specific scenarios from examples
 cd examples/task_manager
 python quickstart.py
+```
+
+### Individual Test Files
+
+```bash
+# Test logging integration across all components
+python tests/integration/test_logging_integration.py
+
+# Test MCP server functionality
+python tests/mcp/test_specification_mcp.py
+python tests/mcp/test_docker_mcp.py
+
+# Test system integration 
+python tests/integration/test_integration.py
 ```
 
 ### Example Test Output

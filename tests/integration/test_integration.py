@@ -10,10 +10,9 @@ import asyncio
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from mcp_servers.docker_mcp_server import DockerMCPServer
-from orchestrator.handoff_flow import _analyze_code_for_docker
+from src.mcp_servers.docker_mcp_server import DockerMCPServer
 
 
 async def test_integration_example():

@@ -14,9 +14,9 @@ from pathlib import Path
 import sys
 
 # Add the project root to the path
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from mcp_servers.docker_mcp_server import DockerMCPServer
+from src.mcp_servers.docker_mcp_server import DockerMCPServer
 
 
 async def test_docker_mcp_server():

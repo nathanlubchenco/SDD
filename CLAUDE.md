@@ -25,11 +25,17 @@ docker-compose exec python bash
 
 ### Testing
 ```bash
-# Run specific integration test
-pytest tests/integration/test_spec_to_code_pipeline.py
-
 # Run all tests
-pytest
+pytest tests/ -v
+
+# Run specific test categories
+pytest tests/unit/ -v          # Unit tests
+pytest tests/integration/ -v   # Integration tests  
+pytest tests/mcp/ -v          # MCP server tests
+
+# Run individual test files
+python tests/integration/test_logging_integration.py
+python tests/mcp/test_specification_mcp.py
 
 # Via Docker
 docker-compose run --rm python pytest
@@ -38,14 +44,16 @@ docker-compose run --rm python pytest
 ## Architecture
 
 ### Core Components
-- **core/**: Core SDD functionality (constraint verification, performance optimization, scenario validation)
-- **mcp_servers/**: MCP (Model Context Protocol) servers - specialized AI agents for different aspects:
+- **src/core/**: Core SDD functionality (constraint verification, performance optimization, scenario validation)
+- **src/mcp_servers/**: MCP (Model Context Protocol) servers - specialized AI agents for different aspects:
   - `specification_server.py`: Manages scenarios and constraints
   - `implementation_server.py`: Handles code generation and testing
   - `monitoring_server.py`: Production monitoring and auto-remediation
   - `debugger_server.py`: Behavior-focused debugging
-- **orchestrator/**: Coordinates the end-to-end SDD workflow from specification to deployment
+- **src/orchestrator/**: Coordinates the end-to-end SDD workflow from specification to deployment
 - **examples/**: Real-world examples showing SDD specifications (task_manager, ecommerce_platform)
+- **tests/**: Organized test suite with unit, integration, and MCP tests
+- **docs/**: Documentation including architecture, examples, and logging guides
 
 ### Specification Format
 SDD uses YAML-based specifications with two key components:

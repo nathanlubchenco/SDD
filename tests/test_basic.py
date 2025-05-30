@@ -15,9 +15,9 @@ def test_project_structure():
     project_root = Path(__file__).parent.parent
     
     # Check core directories exist
-    assert (project_root / "core").exists()
-    assert (project_root / "mcp_servers").exists()
-    assert (project_root / "orchestrator").exists()
+    assert (project_root / "src" / "core").exists()
+    assert (project_root / "src" / "mcp_servers").exists()
+    assert (project_root / "src" / "orchestrator").exists()
     assert (project_root / "examples").exists()
     
     # Check key files exist
@@ -29,8 +29,8 @@ def test_project_structure():
 def test_imports():
     """Test that core modules can be imported."""
     try:
-        from mcp_servers.base_mcp_server import BaseMCPServer
-        from orchestrator.iterative_orchestrator import IterativeOrchestrator
+        from src.mcp_servers.base_mcp_server import BaseMCPServer
+        from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
         assert True
     except ImportError as e:
         pytest.fail(f"Failed to import core modules: {e}")
@@ -46,7 +46,7 @@ def test_demo_script_exists():
 @pytest.mark.asyncio
 async def test_iterative_orchestrator_init():
     """Test that IterativeOrchestrator can be initialized."""
-    from orchestrator.iterative_orchestrator import IterativeOrchestrator
+    from src.orchestrator.iterative_orchestrator import IterativeOrchestrator
     
     # Create orchestrator without initializing servers (to avoid requiring OpenAI API key)
     orchestrator = IterativeOrchestrator("test_workspace", max_iterations=1)
@@ -59,7 +59,7 @@ async def test_iterative_orchestrator_init():
 
 def test_mcp_servers_exist():
     """Test that all MCP server files exist."""
-    mcp_dir = Path(__file__).parent.parent / "mcp_servers"
+    mcp_dir = Path(__file__).parent.parent / "src" / "mcp_servers"
     
     expected_servers = [
         "base_mcp_server.py",

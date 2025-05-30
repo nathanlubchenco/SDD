@@ -5,7 +5,7 @@ Allows users to specify provider and model through configuration or parameters.
 
 import os
 from typing import List, Dict, Any, Optional
-from core import openai_client, anthropic_client
+from src.core import openai_client, anthropic_client
 
 # Default models for each provider (latest as of 2025)
 DEFAULT_MODELS = {

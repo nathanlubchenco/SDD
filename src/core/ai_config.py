@@ -6,7 +6,7 @@ AI client configuration and testing utility.
 import argparse
 import os
 import sys
-from core.ai_client import chat_completion, list_available_models, get_current_config
+from src.core.ai_client import chat_completion, list_available_models, get_current_config
 
 def test_client(provider: str = None, model: str = None):
     """Test the AI client with a simple completion."""

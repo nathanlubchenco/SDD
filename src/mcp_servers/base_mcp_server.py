@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from core.sdd_logger import get_logger
+from src.core.sdd_logger import get_logger
 
 
 @dataclass
@@ -66,7 +66,7 @@ class BaseMCPServer(ABC):
     def _init_ai_client(self):
         """Initialize AI client for tool implementations."""
         try:
-            from core import ai_client
+            from src.core import ai_client
             self.ai_client = ai_client
         except ImportError as e:
             self.logger.warning(f"AI client not available: {e}")
