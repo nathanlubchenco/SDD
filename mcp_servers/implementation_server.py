@@ -1,30 +1,436 @@
+"""
+Implementation MCP Server for AI-driven code generation and refinement.
+
+This server handles code generation, testing, and iterative refinement using AI.
+It supports the full generate→test→refine cycle for AI-driven development.
+"""
+
 import asyncio
-import subprocess
-import tempfile
-from pathlib import Path
-from typing import Dict, List, Optional
 import ast
-import time
+import json
+import tempfile
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+from .base_mcp_server import BaseMCPServer
 
 
-class ImplementationMCPServer:
-    """MCP Server for code generation and implementation"""
+class ImplementationMCPServer(BaseMCPServer):
+    """
+    MCP Server for AI-driven implementation generation and refinement.
+    
+    This server provides tools for generating initial implementations,
+    refining code based on test failures and quality analysis,
+    and managing the iterative development process.
+    """
 
-    def __init__(self, workspace_dir: Path):
-        self.name = "implementation-server"
-        self.workspace_dir = workspace_dir
+    def __init__(self, workspace_dir: Optional[Path] = None):
+        super().__init__("implementation-server", "1.0.0")
+        self.workspace_dir = workspace_dir or Path("workspaces")
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.active_workspaces = {}
 
-    async def create_workspace(self, project_name: str, template: str = "microservice") -> Dict:
-        """Create a new workspace for implementation"""
+    def _register_capabilities(self):
+        """Register implementation and refinement tools."""
+        
+        # Core implementation generation
+        self.register_tool(
+            name="generate_implementation",
+            description="Generate initial implementation from scenarios and constraints",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "scenarios": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Behavior scenarios to implement"
+                    },
+                    "constraints": {
+                        "type": "object",
+                        "description": "Non-functional constraints and requirements"
+                    },
+                    "target_framework": {
+                        "type": "string",
+                        "enum": ["fastapi", "flask", "django", "plain"],
+                        "description": "Target framework for implementation",
+                        "default": "fastapi"
+                    },
+                    "include_tests": {
+                        "type": "boolean",
+                        "description": "Whether to generate test code",
+                        "default": True
+                    },
+                    "optimization_level": {
+                        "type": "string",
+                        "enum": ["simple", "balanced", "performance", "maintainable"],
+                        "description": "Code optimization focus",
+                        "default": "balanced"
+                    }
+                },
+                "required": ["scenarios"]
+            },
+            handler=self._generate_implementation
+        )
 
+        self.register_tool(
+            name="refine_implementation",
+            description="Refine existing implementation based on test failures and quality analysis",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "current_implementation": {
+                        "type": "object",
+                        "description": "Current implementation to refine"
+                    },
+                    "test_failures": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Test failures to address"
+                    },
+                    "quality_issues": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "Code quality issues to fix"
+                    },
+                    "refactoring_suggestions": {
+                        "type": "array",
+                        "items": {"type": "object"},
+                        "description": "AI-generated refactoring suggestions"
+                    },
+                    "target_quality_score": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 100,
+                        "description": "Target quality score to achieve",
+                        "default": 80
+                    },
+                    "preserve_functionality": {
+                        "type": "boolean",
+                        "description": "Whether to preserve existing functionality",
+                        "default": True
+                    }
+                },
+                "required": ["current_implementation"]
+            },
+            handler=self._refine_implementation
+        )
+
+        self.register_tool(
+            name="generate_code_from_specification",
+            description="Generate specific code module from detailed specification",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "specification_text": {
+                        "type": "string",
+                        "description": "Detailed specification for code generation"
+                    },
+                    "module_name": {
+                        "type": "string",
+                        "description": "Name of the module to generate"
+                    },
+                    "style_preferences": {
+                        "type": "object",
+                        "description": "Code style and structure preferences"
+                    }
+                },
+                "required": ["specification_text", "module_name"]
+            },
+            handler=self._generate_code_from_specification
+        )
+
+        self.register_tool(
+            name="optimize_for_constraints",
+            description="Optimize implementation to meet specific constraints",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "implementation": {
+                        "type": "object",
+                        "description": "Implementation to optimize"
+                    },
+                    "constraints": {
+                        "type": "object",
+                        "description": "Constraints to optimize for"
+                    },
+                    "optimization_focus": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Areas to focus optimization: performance, memory, security, readability"
+                    }
+                },
+                "required": ["implementation", "constraints"]
+            },
+            handler=self._optimize_for_constraints
+        )
+
+        self.register_tool(
+            name="create_workspace",
+            description="Create a new workspace for development",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "project_name": {
+                        "type": "string",
+                        "description": "Name of the project"
+                    },
+                    "template": {
+                        "type": "string",
+                        "enum": ["microservice", "library", "cli", "webapp"],
+                        "description": "Project template to use",
+                        "default": "microservice"
+                    }
+                },
+                "required": ["project_name"]
+            },
+            handler=self._create_workspace
+        )
+
+        self.register_tool(
+            name="write_implementation_files",
+            description="Write implementation files to workspace",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "workspace_id": {
+                        "type": "string",
+                        "description": "Workspace identifier"
+                    },
+                    "implementation": {
+                        "type": "object",
+                        "description": "Implementation data to write"
+                    }
+                },
+                "required": ["workspace_id", "implementation"]
+            },
+            handler=self._write_implementation_files
+        )
+
+    async def _generate_implementation(self,
+                                     scenarios: List[Dict[str, Any]],
+                                     constraints: Dict[str, Any] = {},
+                                     target_framework: str = "fastapi",
+                                     include_tests: bool = True,
+                                     optimization_level: str = "balanced") -> Dict[str, Any]:
+        """Generate initial implementation from scenarios and constraints."""
+        
+        if not self.ai_client:
+            return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
+
+        # Build comprehensive prompt for implementation generation
+        prompt = self._build_implementation_prompt(
+            scenarios, constraints, target_framework, optimization_level
+        )
+
+        try:
+            response = self.ai_client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=4000
+            )
+
+            implementation = self._parse_implementation_response(response, include_tests)
+            
+            # Add metadata
+            implementation["metadata"] = {
+                "scenarios_count": len(scenarios),
+                "framework": target_framework,
+                "optimization_level": optimization_level,
+                "generated_with_ai": True
+            }
+
+            self.logger.info(f"Generated implementation with {len(scenarios)} scenarios")
+            return implementation
+
+        except Exception as e:
+            self.logger.error(f"AI implementation generation failed: {e}")
+            return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
+
+    async def _refine_implementation(self,
+                                   current_implementation: Dict[str, Any],
+                                   test_failures: List[Dict[str, Any]] = [],
+                                   quality_issues: List[Dict[str, Any]] = [],
+                                   refactoring_suggestions: List[Dict[str, Any]] = [],
+                                   target_quality_score: int = 80,
+                                   preserve_functionality: bool = True) -> Dict[str, Any]:
+        """Refine implementation based on feedback from testing and analysis."""
+        
+        if not self.ai_client:
+            return {"success": False, "error": "AI client not available for refinement"}
+
+        # Extract current code
+        current_code = current_implementation.get("main_module", "")
+        current_tests = current_implementation.get("test_module", "")
+
+        # Build refinement prompt
+        prompt = self._build_refinement_prompt(
+            current_code=current_code,
+            current_tests=current_tests,
+            test_failures=test_failures,
+            quality_issues=quality_issues,
+            refactoring_suggestions=refactoring_suggestions,
+            target_quality_score=target_quality_score,
+            preserve_functionality=preserve_functionality
+        )
+
+        try:
+            response = self.ai_client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=4000
+            )
+
+            refined_implementation = self._parse_implementation_response(response, include_tests=True)
+            
+            # Preserve metadata and add refinement info
+            refined_implementation["metadata"] = current_implementation.get("metadata", {})
+            refined_implementation["metadata"]["refinement_info"] = {
+                "test_failures_addressed": len(test_failures),
+                "quality_issues_addressed": len(quality_issues),
+                "suggestions_applied": len(refactoring_suggestions),
+                "target_quality_score": target_quality_score
+            }
+
+            self.logger.info(f"Refined implementation addressing {len(test_failures)} test failures and {len(quality_issues)} quality issues")
+            
+            return {
+                "success": True,
+                "implementation": refined_implementation
+            }
+
+        except Exception as e:
+            self.logger.error(f"AI implementation refinement failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _generate_code_from_specification(self,
+                                              specification_text: str,
+                                              module_name: str,
+                                              style_preferences: Dict[str, Any] = {}) -> Dict[str, Any]:
+        """Generate code from detailed specification."""
+        
+        if not self.ai_client:
+            return {"success": False, "error": "AI client not available"}
+
+        prompt = f"""
+Generate Python code for the following specification:
+
+MODULE NAME: {module_name}
+
+SPECIFICATION:
+{specification_text}
+
+STYLE PREFERENCES:
+{json.dumps(style_preferences, indent=2) if style_preferences else "Use standard Python conventions"}
+
+Requirements:
+1. Generate clean, well-documented Python code
+2. Include type hints where appropriate
+3. Follow PEP 8 conventions
+4. Include docstrings for classes and functions
+5. Handle errors appropriately
+6. Make the code production-ready
+
+Return the code in this JSON format:
+{{
+  "module_code": "the generated Python code",
+  "dependencies": ["list", "of", "required", "packages"],
+  "key_functions": ["list", "of", "main", "functions"],
+  "complexity_estimate": "low|medium|high"
+}}
+"""
+
+        try:
+            response = self.ai_client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=3000
+            )
+
+            result = self._parse_code_generation_response(response)
+            result["success"] = True
+            
+            self.logger.info(f"Generated code for module {module_name}")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Code generation failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _optimize_for_constraints(self,
+                                      implementation: Dict[str, Any],
+                                      constraints: Dict[str, Any],
+                                      optimization_focus: List[str] = ["performance"]) -> Dict[str, Any]:
+        """Optimize implementation to meet specific constraints."""
+        
+        if not self.ai_client:
+            return {"success": False, "error": "AI client not available for optimization"}
+
+        current_code = implementation.get("main_module", "")
+        
+        prompt = f"""
+Optimize this Python code to meet the specified constraints:
+
+CURRENT CODE:
+```python
+{current_code}
+```
+
+CONSTRAINTS TO MEET:
+{json.dumps(constraints, indent=2)}
+
+OPTIMIZATION FOCUS: {', '.join(optimization_focus)}
+
+Please optimize the code while:
+1. Maintaining all existing functionality
+2. Meeting the specified constraints
+3. Focusing on: {', '.join(optimization_focus)}
+4. Keeping the code readable and maintainable
+
+Return optimized code in JSON format:
+{{
+  "optimized_code": "the optimized Python code",
+  "optimizations_applied": ["list of optimizations made"],
+  "constraint_compliance": {{"constraint": "compliance_status"}},
+  "performance_notes": "notes about performance improvements"
+}}
+"""
+
+        try:
+            response = self.ai_client.chat_completion(
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.1,
+                max_tokens=3000
+            )
+
+            result = self._parse_optimization_response(response)
+            result["success"] = True
+            
+            self.logger.info(f"Optimized implementation for {len(optimization_focus)} focus areas")
+            return result
+
+        except Exception as e:
+            self.logger.error(f"Optimization failed: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def _create_workspace(self,
+                              project_name: str,
+                              template: str = "microservice") -> Dict[str, Any]:
+        """Create a new workspace for development."""
+        
+        import time
+        
         workspace_path = self.workspace_dir / project_name
         workspace_path.mkdir(parents=True, exist_ok=True)
 
         # Initialize based on template
         if template == "microservice":
             await self._init_microservice_template(workspace_path)
+        elif template == "library":
+            await self._init_library_template(workspace_path)
+        elif template == "cli":
+            await self._init_cli_template(workspace_path)
+        elif template == "webapp":
+            await self._init_webapp_template(workspace_path)
 
         workspace_id = f"ws_{project_name}_{int(time.time())}"
         self.active_workspaces[workspace_id] = {
@@ -34,411 +440,344 @@ class ImplementationMCPServer:
         }
 
         return {
+            "success": True,
             "workspace_id": workspace_id,
             "path": str(workspace_path),
-            "status": "created"
+            "template": template
         }
 
-    async def generate_implementation(self, workspace_id: str, specification: Dict,
-                                     language: str = "python", framework: str = "fastapi") -> Dict:
-        """Generate complete implementation from specification"""
-
-        workspace = self.active_workspaces.get(workspace_id)
-        if not workspace:
-            return {"error": "Workspace not found"}
-
-        # Generate different components using our existing handoff_flow
-        from orchestrator.handoff_flow import generate_implementation, generate_tests, _generate_filenames
+    async def _write_implementation_files(self,
+                                        workspace_id: str,
+                                        implementation: Dict[str, Any]) -> Dict[str, Any]:
+        """Write implementation files to workspace."""
         
-        implementation_code = generate_implementation(specification)
-        test_code = generate_tests(specification)
-        filenames = _generate_filenames(specification)
-
-        # Write files to workspace
-        await self._write_implementation_files(
-            workspace["path"],
-            implementation_code,
-            test_code,
-            filenames
-        )
-
-        # Run initial tests
-        test_results = await self.run_tests(workspace_id)
-
-        return {
-            "workspace_id": workspace_id,
-            "files_generated": {
-                "implementation": 1,
-                "tests": 1
-            },
-            "test_results": test_results
-        }
-
-    async def run_tests(self, workspace_id: str, test_type: str = "all",
-                       coverage: bool = True) -> Dict:
-        """Run tests and return results"""
-
         workspace = self.active_workspaces.get(workspace_id)
         if not workspace:
-            return {"error": "Workspace not found"}
+            return {"success": False, "error": "Workspace not found"}
 
         workspace_path = workspace["path"]
-        
-        # Run tests using subprocess instead of Docker for simplicity
+        files_written = []
+
         try:
-            result = subprocess.run([
-                "python", "-m", "pytest", str(workspace_path), "-v"
-            ], capture_output=True, text=True, timeout=60)
-            
-            test_results = self._parse_test_results(result.stdout, result.stderr, result.returncode)
-            
-        except subprocess.TimeoutExpired:
-            test_results = {
-                "passed": 0,
-                "failed": 1,
-                "details": "Test execution timed out"
-            }
-        except Exception as e:
-            test_results = {
-                "passed": 0,
-                "failed": 1,
-                "details": f"Test execution error: {str(e)}"
-            }
+            # Write main module
+            if "main_module" in implementation:
+                main_file = workspace_path / f"{workspace['project_name']}.py"
+                main_file.write_text(implementation["main_module"])
+                files_written.append(str(main_file))
 
-        return {
-            "workspace_id": workspace_id,
-            "test_type": test_type,
-            "passed": test_results["passed"],
-            "failed": test_results["failed"],
-            "details": test_results["details"]
-        }
+            # Write test module
+            if "test_module" in implementation:
+                test_file = workspace_path / f"test_{workspace['project_name']}.py"
+                test_file.write_text(implementation["test_module"])
+                files_written.append(str(test_file))
 
-    async def verify_constraints(self, workspace_id: str, constraints: Dict,
-                                 load_test: bool = True) -> Dict:
-        """Verify implementation meets all constraints"""
-
-        workspace = self.active_workspaces.get(workspace_id)
-        if not workspace:
-            return {"error": "Workspace not found"}
-
-        verification_results = {
-            "workspace_id": workspace_id,
-            "constraints_met": {},
-            "constraints_failed": {},
-            "performance_metrics": {}
-        }
-
-        # Basic constraint verification without Docker
-        try:
-            # Check if code compiles
-            # Find the implementation file (could have any name now)
-            implementation_files = list(workspace["path"].glob("*.py"))
-            implementation_file = None
-            for f in implementation_files:
-                if not f.name.startswith("test_") and f.name != "__init__.py":
-                    implementation_file = f
-                    break
-            if implementation_file and implementation_file.exists():
-                with open(implementation_file) as f:
-                    code = f.read()
-                    
-                # Parse to check syntax
-                ast.parse(code)
-                verification_results["constraints_met"]["syntax"] = {"passed": True}
-                
-                # Basic performance check - count lines of code
-                line_count = len(code.split('\n'))
-                verification_results["performance_metrics"]["lines_of_code"] = line_count
-                
-                if line_count < 500:  # Arbitrary threshold
-                    verification_results["constraints_met"]["code_complexity"] = {"passed": True}
+            # Write requirements.txt
+            if "dependencies" in implementation:
+                deps = implementation["dependencies"]
+                if isinstance(deps, list):
+                    deps_content = "\n".join(deps) + "\n"
                 else:
-                    verification_results["constraints_failed"]["code_complexity"] = {"passed": False, "reason": "Too many lines"}
-                    
-        except SyntaxError as e:
-            verification_results["constraints_failed"]["syntax"] = {"passed": False, "error": str(e)}
+                    deps_content = str(deps)
+                
+                req_file = workspace_path / "requirements.txt"
+                req_file.write_text(deps_content)
+                files_written.append(str(req_file))
+
+            # Write __init__.py
+            init_file = workspace_path / "__init__.py"
+            if "main_module" in implementation:
+                init_content = self._generate_init_file(implementation["main_module"], workspace['project_name'])
+                init_file.write_text(init_content)
+                files_written.append(str(init_file))
+
+            return {
+                "success": True,
+                "files_written": files_written,
+                "workspace_path": str(workspace_path)
+            }
+
         except Exception as e:
-            verification_results["constraints_failed"]["general"] = {"passed": False, "error": str(e)}
+            return {"success": False, "error": str(e)}
 
-        return verification_results
+    # Helper methods for prompt building and response parsing
 
-    async def optimize_implementation(self, workspace_id: str,
-                                     optimization_targets: Dict,
-                                     max_iterations: int = 5) -> Dict:
-        """Iteratively optimize implementation"""
-
-        workspace = self.active_workspaces.get(workspace_id)
-        if not workspace:
-            return {"error": "Workspace not found"}
-
-        # Simple optimization: just verify current state
-        verification = await self.verify_constraints(workspace_id, optimization_targets)
+    def _build_implementation_prompt(self,
+                                   scenarios: List[Dict[str, Any]],
+                                   constraints: Dict[str, Any],
+                                   framework: str,
+                                   optimization_level: str) -> str:
+        """Build comprehensive prompt for implementation generation."""
         
+        scenarios_text = "\n".join([
+            f"Scenario: {s.get('scenario', 'Unnamed')}\n"
+            f"Given: {s.get('given', '')}\n"
+            f"When: {s.get('when', '')}\n"
+            f"Then: {s.get('then', '')}\n"
+            for s in scenarios
+        ])
+
+        return f"""
+You are an expert Python developer. Generate a complete, production-ready implementation based on these specifications:
+
+BEHAVIORAL SCENARIOS:
+{scenarios_text}
+
+CONSTRAINTS:
+{json.dumps(constraints, indent=2) if constraints else "No specific constraints"}
+
+FRAMEWORK: {framework}
+OPTIMIZATION LEVEL: {optimization_level}
+
+Requirements:
+1. Generate clean, well-structured Python code
+2. Include comprehensive type hints
+3. Add detailed docstrings for all classes and methods
+4. Implement proper error handling
+5. Follow {framework} best practices if applicable
+6. Include comprehensive test code using pytest
+7. Make the code {optimization_level} for the specified optimization level
+
+Return your implementation in this JSON format:
+{{
+  "main_module": "complete Python implementation code",
+  "test_module": "comprehensive pytest test code",
+  "dependencies": ["list", "of", "required", "packages"],
+  "service_name": "suggested service name",
+  "module_name": "main module name",
+  "key_classes": ["list", "of", "main", "classes"],
+  "key_functions": ["list", "of", "main", "functions"],
+  "api_endpoints": ["list", "of", "endpoints", "if", "applicable"]
+}}
+
+Generate high-quality, production-ready code that fully implements all scenarios.
+"""
+
+    def _build_refinement_prompt(self,
+                               current_code: str,
+                               current_tests: str,
+                               test_failures: List[Dict[str, Any]],
+                               quality_issues: List[Dict[str, Any]],
+                               refactoring_suggestions: List[Dict[str, Any]],
+                               target_quality_score: int,
+                               preserve_functionality: bool) -> str:
+        """Build prompt for implementation refinement."""
+        
+        return f"""
+You are an expert Python developer. Refine this implementation to address the identified issues and improve quality.
+
+CURRENT IMPLEMENTATION:
+```python
+{current_code}
+```
+
+CURRENT TESTS:
+```python
+{current_tests}
+```
+
+TEST FAILURES TO ADDRESS:
+{json.dumps(test_failures, indent=2) if test_failures else "No test failures"}
+
+QUALITY ISSUES TO FIX:
+{json.dumps(quality_issues, indent=2) if quality_issues else "No quality issues"}
+
+REFACTORING SUGGESTIONS:
+{json.dumps(refactoring_suggestions, indent=2) if refactoring_suggestions else "No suggestions"}
+
+TARGET QUALITY SCORE: {target_quality_score}/100
+PRESERVE FUNCTIONALITY: {preserve_functionality}
+
+Instructions:
+1. Fix all test failures while preserving functionality
+2. Address all quality issues (complexity, readability, maintainability)
+3. Apply relevant refactoring suggestions
+4. Improve code structure and design patterns
+5. Enhance error handling and edge cases
+6. Optimize for the target quality score
+7. Update tests to match any interface changes
+
+Return the refined implementation in JSON format:
+{{
+  "main_module": "refined Python implementation",
+  "test_module": "updated test code",
+  "dependencies": ["updated", "dependencies"],
+  "improvements_made": ["list", "of", "improvements"],
+  "issues_fixed": ["list", "of", "fixed", "issues"],
+  "quality_enhancements": ["list", "of", "quality", "improvements"]
+}}
+
+Focus on creating high-quality, maintainable code that meets the target quality score.
+"""
+
+    def _parse_implementation_response(self, response: str, include_tests: bool = True) -> Dict[str, Any]:
+        """Parse AI response into implementation structure."""
+        try:
+            # Extract JSON from response
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("```", start)
+                json_text = response[start:end].strip()
+            else:
+                json_text = response.strip()
+
+            data = json.loads(json_text)
+            
+            # Ensure required fields
+            implementation = {
+                "main_module": data.get("main_module", "# No implementation generated"),
+                "dependencies": data.get("dependencies", ["pytest"]),
+                "service_name": data.get("service_name", "generated_service"),
+                "module_name": data.get("module_name", "main"),
+                "key_classes": data.get("key_classes", []),
+                "key_functions": data.get("key_functions", [])
+            }
+
+            if include_tests:
+                implementation["test_module"] = data.get("test_module", "# No tests generated")
+
+            if "api_endpoints" in data:
+                implementation["api_endpoints"] = data["api_endpoints"]
+
+            return implementation
+
+        except (json.JSONDecodeError, KeyError) as e:
+            self.logger.warning(f"Failed to parse implementation response: {e}")
+            return self._fallback_implementation_structure()
+
+    def _parse_code_generation_response(self, response: str) -> Dict[str, Any]:
+        """Parse code generation response."""
+        try:
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("```", start)
+                json_text = response[start:end].strip()
+            else:
+                json_text = response.strip()
+
+            return json.loads(json_text)
+
+        except json.JSONDecodeError:
+            return {
+                "module_code": "# Code generation failed",
+                "dependencies": [],
+                "key_functions": [],
+                "complexity_estimate": "unknown"
+            }
+
+    def _parse_optimization_response(self, response: str) -> Dict[str, Any]:
+        """Parse optimization response."""
+        try:
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("```", start)
+                json_text = response[start:end].strip()
+            else:
+                json_text = response.strip()
+
+            return json.loads(json_text)
+
+        except json.JSONDecodeError:
+            return {
+                "optimized_code": "# Optimization failed",
+                "optimizations_applied": [],
+                "constraint_compliance": {},
+                "performance_notes": "Optimization failed"
+            }
+
+    async def _fallback_implementation_generation(self,
+                                                scenarios: List[Dict[str, Any]],
+                                                constraints: Dict[str, Any],
+                                                framework: str) -> Dict[str, Any]:
+        """Fallback implementation when AI is not available."""
+        
+        # Import existing handoff flow for fallback
+        try:
+            from ..orchestrator.handoff_flow import generate_implementation, generate_tests, _generate_filenames
+            
+            # Convert scenarios to old format
+            spec = {"scenarios": scenarios, "constraints": constraints}
+            
+            implementation_code = generate_implementation(spec)
+            test_code = generate_tests(spec)
+            filenames = _generate_filenames(spec)
+            
+            return {
+                "main_module": implementation_code,
+                "test_module": test_code,
+                "dependencies": ["fastapi", "pydantic", "pytest"],
+                "service_name": filenames.get("module_name", "service"),
+                "module_name": filenames.get("module_name", "main"),
+                "key_classes": [],
+                "key_functions": [],
+                "metadata": {"generated_with_ai": False, "fallback_used": True}
+            }
+
+        except ImportError:
+            return self._fallback_implementation_structure()
+
+    def _fallback_implementation_structure(self) -> Dict[str, Any]:
+        """Basic fallback implementation structure."""
         return {
-            "workspace_id": workspace_id,
-            "iterations": 1,
-            "success": len(verification["constraints_failed"]) == 0,
-            "results": verification
+            "main_module": """
+# Basic implementation template
+class Service:
+    def __init__(self):
+        pass
+    
+    def process(self, data):
+        return {"status": "processed", "data": data}
+""",
+            "test_module": """
+import pytest
+from main import Service
+
+def test_service():
+    service = Service()
+    result = service.process({"test": "data"})
+    assert result["status"] == "processed"
+""",
+            "dependencies": ["pytest"],
+            "service_name": "basic_service",
+            "module_name": "main",
+            "key_classes": ["Service"],
+            "key_functions": ["process"]
         }
+
+    # Template initialization methods
 
     async def _init_microservice_template(self, workspace_path: Path):
-        """Initialize microservice template"""
-        # Create basic structure
+        """Initialize microservice template."""
+        (workspace_path / "requirements.txt").write_text("fastapi\npydantic\npytest\n")
+        (workspace_path / "__init__.py").write_text("")
+        (workspace_path / "README.md").write_text(f"# {workspace_path.name}\n\nMicroservice implementation\n")
+
+    async def _init_library_template(self, workspace_path: Path):
+        """Initialize library template."""
         (workspace_path / "requirements.txt").write_text("pytest\n")
         (workspace_path / "__init__.py").write_text("")
+        (workspace_path / "setup.py").write_text(f"""
+from setuptools import setup, find_packages
 
-    async def _write_implementation_files(self, workspace_path: Path, 
-                                        implementation_code: str, test_code: str, filenames: dict):
-        """Write generated files to workspace"""
-        (workspace_path / filenames['implementation']).write_text(implementation_code)
-        
-        # Fix test code imports and common issues
-        fixed_test_code = self._fix_test_code(test_code, implementation_code, filenames['module_name'])
-        (workspace_path / filenames['test']).write_text(fixed_test_code)
-        
-        # Create proper __init__.py that re-exports everything
-        init_content = self._generate_init_file(implementation_code, filenames['module_name'])
-        (workspace_path / "__init__.py").write_text(init_content)
+setup(
+    name="{workspace_path.name}",
+    version="0.1.0",
+    packages=find_packages(),
+    install_requires=[],
+)
+""")
 
-    def _parse_test_results(self, stdout: str, stderr: str, returncode: int) -> Dict:
-        """Parse test results from pytest output"""
-        if returncode == 0:
-            # Parse successful test output
-            lines = stdout.split('\n')
-            passed = sum(1 for line in lines if 'PASSED' in line)
-            failed = sum(1 for line in lines if 'FAILED' in line)
-        else:
-            # Parse failed test output
-            passed = 0
-            failed = 1  # At least one failure
-            
-        return {
-            "passed": passed,
-            "failed": failed,
-            "details": stdout if stdout else stderr
-        }
+    async def _init_cli_template(self, workspace_path: Path):
+        """Initialize CLI template."""
+        (workspace_path / "requirements.txt").write_text("click\npytest\n")
+        (workspace_path / "__init__.py").write_text("")
 
-    def _fix_test_code(self, test_code: str, implementation_code: str, module_name: str) -> str:
-        """Fix common issues in generated test code with enhanced patterns"""
-        import re
-        
-        lines = test_code.split('\n')
-        fixed_lines = []
-        
-        # Enhanced analysis of implementation code
-        analysis = self._analyze_implementation_code(implementation_code)
-        
-        for line in lines:
-            # Fix import statements
-            if line.startswith('import pytest'):
-                fixed_lines.append(line)
-                # Add required imports based on analysis
-                for import_stmt in analysis['required_imports']:
-                    if import_stmt not in test_code:
-                        fixed_lines.append(import_stmt)
-            elif f'from {module_name} import' in line or 'from task_manager import' in line:
-                # Fix imports based on what's actually in implementation
-                imports = analysis['exports']
-                if imports:
-                    import_line = f"from {module_name} import {', '.join(imports)}"
-                    fixed_lines.append(import_line)
-                else:
-                    # Skip the import line if no exports found
-                    fixed_lines.append("# No exports found in implementation")
-                    continue
-            else:
-                # Apply comprehensive fixes
-                fixed_line = line
-                fixed_line = self._fix_id_type_checks(fixed_line, analysis)
-                fixed_line = self._fix_status_comparisons(fixed_line, analysis)
-                fixed_line = self._fix_enum_usage(fixed_line, analysis)
-                fixed_line = self._fix_exception_references(fixed_line, analysis)
-                fixed_line = self._fix_method_calls(fixed_line, analysis)
-                fixed_lines.append(fixed_line)
-                
-        return '\n'.join(fixed_lines)
-
-    def _analyze_implementation_code(self, implementation_code: str) -> Dict:
-        """Comprehensive analysis of implementation code for better fixing"""
-        import re
-        
-        analysis = {
-            'exports': [],
-            'enums': {},
-            'exceptions': [],
-            'methods': [],
-            'fields': [],
-            'required_imports': [],
-            'id_type': 'int',
-            'uses_dataclass': False,
-            'uses_enum': False
-        }
-        
-        # Extract class definitions and exports
-        analysis['exports'] = self._extract_exports_from_code(implementation_code)
-        
-        # Detect ID type
-        if 'uuid.UUID' in implementation_code or 'UUID(' in implementation_code:
-            analysis['id_type'] = 'uuid'
-            analysis['required_imports'].append('import uuid')
-        elif 'id: str' in implementation_code:
-            analysis['id_type'] = 'str'
-            
-        # Detect datetime usage
-        if 'datetime' in implementation_code and 'from datetime import datetime' not in implementation_code:
-            analysis['required_imports'].append('from datetime import datetime')
-            
-        # Extract enum definitions with comprehensive patterns
-        enum_patterns = [
-            r'class\s+(\w*Status\w*)\s*\([^)]*Enum[^)]*\):\s*\n((?:\s+\w+\s*=\s*["\'][^"\']+["\']\s*\n?)*)',
-            r'class\s+(\w+)\s*\([^)]*Enum[^)]*\):\s*\n((?:\s+\w+\s*=\s*["\'][^"\']+["\']\s*\n?)*)',
-        ]
-        
-        for pattern in enum_patterns:
-            for match in re.finditer(pattern, implementation_code, re.MULTILINE):
-                enum_name = match.group(1)
-                enum_body = match.group(2)
-                analysis['enums'][enum_name] = {}
-                analysis['uses_enum'] = True
-                
-                # Extract enum values
-                value_pattern = r'\s*(\w+)\s*=\s*["\']([^"\']+)["\']\s*'
-                for value_match in re.finditer(value_pattern, enum_body):
-                    key, value = value_match.groups()
-                    analysis['enums'][enum_name][value.lower()] = f"{enum_name}.{key}"
-        
-        # Extract exception classes
-        exception_pattern = r'class\s+(\w*(?:Error|Exception)\w*)\s*\([^)]*\):'
-        analysis['exceptions'] = [match.group(1) for match in re.finditer(exception_pattern, implementation_code)]
-        
-        # Detect dataclass usage
-        if '@dataclass' in implementation_code:
-            analysis['uses_dataclass'] = True
-            
-        return analysis
-
-    def _fix_id_type_checks(self, line: str, analysis: Dict) -> str:
-        """Fix ID type assertions based on implementation"""
-        import re
-        
-        if analysis['id_type'] == 'uuid':
-            # Fix isinstance checks for UUID
-            line = re.sub(r'isinstance\(([^,]+)\.id,\s*int\)', r'isinstance(\1.id, uuid.UUID)', line)
-            # Fix assertion messages
-            line = line.replace('Task ID is not unique', 'Task ID is not a UUID')
-            line = line.replace('ID should be an integer', 'ID should be a UUID')
-        elif analysis['id_type'] == 'str':
-            # Fix isinstance checks for string IDs
-            line = re.sub(r'isinstance\(([^,]+)\.id,\s*int\)', r'isinstance(\1.id, str)', line)
-            
-        return line
-
-    def _fix_status_comparisons(self, line: str, analysis: Dict) -> str:
-        """Fix status comparisons with comprehensive enum handling"""
-        import re
-        
-        if not analysis['uses_enum'] or not analysis['enums']:
-            return line
-            
-        # Find the main status enum (usually the first one or one with 'Status' in name)
-        status_enum = None
-        for enum_name, enum_values in analysis['enums'].items():
-            if 'status' in enum_name.lower() or len(analysis['enums']) == 1:
-                status_enum = enum_name
-                enum_mappings = enum_values
-                break
-                
-        if not status_enum:
-            return line
-            
-        # Comprehensive status comparison patterns
-        comparison_patterns = [
-            (r'(\w+)\.status\s*(==|!=)\s*["\']([^"\']+)["\']', r'\1.status \2 {enum_value}'),
-            (r'(["\'])([^"\']+)\1\s*(==|!=)\s*(\w+)\.status', r'{enum_value} \3 \4.status'),
-            (r'status\s*(==|!=)\s*["\']([^"\']+)["\']', r'status \1 {enum_value}'),
-            (r'assert\s+(\w+)\.status\s*==\s*["\']([^"\']+)["\']', r'assert \1.status == {enum_value}'),
-        ]
-        
-        for pattern, replacement in comparison_patterns:
-            def replace_status(match):
-                groups = match.groups()
-                if len(groups) >= 3:
-                    status_value = None
-                    for i, group in enumerate(groups):
-                        if group and group.lower() in enum_mappings:
-                            status_value = enum_mappings[group.lower()]
-                            break
-                    if status_value:
-                        return replacement.format(enum_value=status_value)
-                return match.group(0)
-                
-            line = re.sub(pattern, replace_status, line)
-            
-        return line
-
-    def _fix_enum_usage(self, line: str, analysis: Dict) -> str:
-        """Fix enum parameter usage in method calls"""
-        import re
-        
-        if not analysis['uses_enum'] or not analysis['enums']:
-            return line
-            
-        # Fix enum usage in method parameters
-        for enum_name, enum_values in analysis['enums'].items():
-            for string_value, enum_value in enum_values.items():
-                # Fix parameter assignments
-                patterns = [
-                    rf'status\s*=\s*["\']({string_value})["\']',
-                    rf'status\s*=\s*"{string_value}"',
-                    rf"status\s*=\s*'{string_value}'",
-                ]
-                
-                for pattern in patterns:
-                    line = re.sub(pattern, f'status={enum_value}', line, flags=re.IGNORECASE)
-                    
-        return line
-
-    def _fix_exception_references(self, line: str, analysis: Dict) -> str:
-        """Fix exception class references"""
-        if not analysis['exceptions']:
-            return line
-            
-        # Replace generic exception names with actual ones
-        generic_exceptions = ['TaskError', 'ValidationError', 'BusinessError']
-        for generic in generic_exceptions:
-            if generic in line:
-                # Use the first matching exception or the first available one
-                actual_exception = None
-                for exc in analysis['exceptions']:
-                    if generic.lower() in exc.lower():
-                        actual_exception = exc
-                        break
-                if not actual_exception and analysis['exceptions']:
-                    actual_exception = analysis['exceptions'][0]
-                    
-                if actual_exception:
-                    line = line.replace(generic, actual_exception)
-                    
-        return line
-
-    def _fix_method_calls(self, line: str, analysis: Dict) -> str:
-        """Fix method calls based on actual implementation"""
-        import re
-        
-        # Common method name variations
-        method_mappings = {
-            'add_task': ['add_task', 'create_task', 'new_task'],
-            'get_task': ['get_task', 'find_task', 'retrieve_task'],
-            'list_tasks': ['list_tasks', 'get_tasks', 'all_tasks'],
-            'complete_task': ['complete_task', 'mark_complete', 'finish_task'],
-        }
-        
-        # This is a simplified version - in a real implementation,
-        # we'd analyze the actual method names from the implementation
-        return line
+    async def _init_webapp_template(self, workspace_path: Path):
+        """Initialize web app template."""
+        (workspace_path / "requirements.txt").write_text("fastapi\nuvicorn\npytest\n")
+        (workspace_path / "__init__.py").write_text("")
 
     def _generate_init_file(self, implementation_code: str, module_name: str) -> str:
-        """Generate proper __init__.py that re-exports everything"""
+        """Generate proper __init__.py that re-exports everything."""
         exports = self._extract_exports_from_code(implementation_code)
         
         if not exports:
@@ -450,9 +789,7 @@ class ImplementationMCPServer:
         return init_content
 
     def _extract_exports_from_code(self, code: str) -> List[str]:
-        """Extract class and exception names from implementation code using AST"""
-        import ast
-        
+        """Extract class and function names from implementation code using AST."""
         exports = []
         try:
             tree = ast.parse(code)

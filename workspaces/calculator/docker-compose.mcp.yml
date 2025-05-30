@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  calculator:
+    image: calculator:latest
+    build:
+      context: ./calculator
+      dockerfile: Dockerfile
+    environment:
+      - ENV=production
+    volumes:
+      - data:/app/data
+    networks:
+      - internal_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: always
+
+volumes:
+  data:
+
+networks:
+  internal_network:
+    internal: true
