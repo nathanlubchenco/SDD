@@ -47,17 +47,8 @@ class IterativeOrchestrator:
         
     async def initialize(self):
         """Initialize all MCP servers."""
-        servers = [
-            self.spec_server,
-            self.impl_server, 
-            self.test_server,
-            self.analysis_server,
-            self.docker_server
-        ]
-        
-        for server in servers:
-            await server.initialize()
-            
+        # MCP servers are initialized in their constructors
+        # This method exists for compatibility but servers are already ready
         self.logger.info("All MCP servers initialized")
 
     async def iterative_development_cycle(self, 
@@ -378,10 +369,18 @@ class IterativeOrchestrator:
             if response.get("error"):
                 return {"success": False, "error": response["error"]}
                 
-            return {
-                "success": True,
-                "implementation": response["result"]["content"] 
-            }
+            content = response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    implementation = json.loads(content[0].get("text", "{}"))
+                    return {
+                        "success": True,
+                        "implementation": implementation
+                    }
+                except (json.JSONDecodeError, KeyError):
+                    return {"success": False, "error": "Failed to parse implementation response"}
+            else:
+                return {"success": False, "error": "No implementation response"}
             
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -410,7 +409,14 @@ class IterativeOrchestrator:
                 }
             }
             syntax_response = await self.test_server.handle_mcp_request(syntax_request)
-            test_results["syntax_check"] = syntax_response.get("result", {}).get("content", {})
+            content = syntax_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    test_results["syntax_check"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    test_results["syntax_check"] = {"valid": False, "error": "Failed to parse response"}
+            else:
+                test_results["syntax_check"] = {"valid": False, "error": "No response"}
             
             # 2. Check dependencies
             deps_request = {
@@ -421,7 +427,14 @@ class IterativeOrchestrator:
                 }
             }
             deps_response = await self.test_server.handle_mcp_request(deps_request)
-            test_results["dependency_check"] = deps_response.get("result", {}).get("content", {})
+            content = deps_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    test_results["dependency_check"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    test_results["dependency_check"] = {"all_available": False, "error": "Failed to parse response"}
+            else:
+                test_results["dependency_check"] = {"all_available": False, "error": "No response"}
             
             # 3. Run linting
             lint_request = {
@@ -432,7 +445,14 @@ class IterativeOrchestrator:
                 }
             }
             lint_response = await self.test_server.handle_mcp_request(lint_request)
-            test_results["linting"] = lint_response.get("result", {}).get("content", {})
+            content = lint_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    test_results["linting"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    test_results["linting"] = {"issues_count": 99, "error": "Failed to parse response"}
+            else:
+                test_results["linting"] = {"issues_count": 99, "error": "No response"}
             
             # 4. Run unit tests if we have test code
             if test_code:
@@ -448,7 +468,14 @@ class IterativeOrchestrator:
                     }
                 }
                 test_response = await self.test_server.handle_mcp_request(test_request)
-                test_results["unit_tests"] = test_response.get("result", {}).get("content", {})
+                content = test_response.get("result", {}).get("content", [])
+                if isinstance(content, list) and content:
+                    try:
+                        test_results["unit_tests"] = json.loads(content[0].get("text", "{}"))
+                    except (json.JSONDecodeError, KeyError):
+                        test_results["unit_tests"] = {"success": False, "error": "Failed to parse response"}
+                else:
+                    test_results["unit_tests"] = {"success": False, "error": "No response"}
             
             # Determine overall success
             test_results["overall_success"] = (
@@ -490,7 +517,14 @@ class IterativeOrchestrator:
                 }
             }
             quality_response = await self.analysis_server.handle_mcp_request(quality_request)
-            analysis_results["code_quality"] = quality_response.get("result", {}).get("content", {})
+            content = quality_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    analysis_results["code_quality"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    analysis_results["code_quality"] = {"overall_score": 0, "error": "Failed to parse response"}
+            else:
+                analysis_results["code_quality"] = {"overall_score": 0, "error": "No response"}
             
             # 2. Performance analysis
             perf_request = {
@@ -504,7 +538,14 @@ class IterativeOrchestrator:
                 }
             }
             perf_response = await self.analysis_server.handle_mcp_request(perf_request)
-            analysis_results["performance_analysis"] = perf_response.get("result", {}).get("content", {})
+            content = perf_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    analysis_results["performance_analysis"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    analysis_results["performance_analysis"] = {"efficiency_score": 0, "error": "Failed to parse response"}
+            else:
+                analysis_results["performance_analysis"] = {"efficiency_score": 0, "error": "No response"}
             
             # 3. Refactoring suggestions
             refactor_request = {
@@ -519,7 +560,14 @@ class IterativeOrchestrator:
                 }
             }
             refactor_response = await self.analysis_server.handle_mcp_request(refactor_request)
-            analysis_results["refactoring_suggestions"] = refactor_response.get("result", {}).get("content", {})
+            content = refactor_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    analysis_results["refactoring_suggestions"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    analysis_results["refactoring_suggestions"] = {"suggestions": [], "error": "Failed to parse response"}
+            else:
+                analysis_results["refactoring_suggestions"] = {"suggestions": [], "error": "No response"}
             
             # 4. Pattern analysis
             pattern_request = {
@@ -533,7 +581,14 @@ class IterativeOrchestrator:
                 }
             }
             pattern_response = await self.analysis_server.handle_mcp_request(pattern_request)
-            analysis_results["pattern_analysis"] = pattern_response.get("result", {}).get("content", {})
+            content = pattern_response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                try:
+                    analysis_results["pattern_analysis"] = json.loads(content[0].get("text", "{}"))
+                except (json.JSONDecodeError, KeyError):
+                    analysis_results["pattern_analysis"] = {"patterns": [], "error": "Failed to parse response"}
+            else:
+                analysis_results["pattern_analysis"] = {"patterns": [], "error": "No response"}
             
             # 5. Generate overall assessment
             analysis_results["overall_assessment"] = self._generate_overall_assessment(analysis_results)

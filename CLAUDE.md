@@ -41,7 +41,7 @@ python tests/mcp/test_docker_mcp.py
 # Run system demos (no API key required)
 python examples/simple_demo.py
 
-# Run full AI development demo (requires OpenAI API key)
+# Run full AI development demo (requires OpenAI API key - shows system architecture)
 python examples/iterative_development_demo.py
 
 # Via Docker
