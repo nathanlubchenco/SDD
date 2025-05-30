@@ -15,6 +15,7 @@ from mcp_servers.implementation_server import ImplementationMCPServer
 from mcp_servers.testing_mcp_server import TestingMCPServer
 from mcp_servers.analysis_mcp_server import AnalysisMCPServer
 from mcp_servers.docker_mcp_server import DockerMCPServer
+from core.sdd_logger import get_logger
 
 
 class IterativeOrchestrator:
@@ -32,7 +33,7 @@ class IterativeOrchestrator:
     def __init__(self, workspace_path: str, max_iterations: int = 5):
         self.workspace_path = Path(workspace_path)
         self.max_iterations = max_iterations
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger("sdd.orchestrator")
         
         # Initialize MCP servers
         self.spec_server = SpecificationMCPServer(Path("specs"))
@@ -75,14 +76,27 @@ class IterativeOrchestrator:
             Complete development cycle results including all iterations
         """
         
-        self.logger.info(f"Starting iterative development cycle for {specification_path}")
-        
-        # Load and validate specification
-        spec_result = await self._load_specification(specification_path)
-        if not spec_result["success"]:
-            return {"success": False, "error": "Failed to load specification", "details": spec_result}
-        
-        specification = spec_result["specification"]
+        with self.logger.correlation_context(component="orchestrator", 
+                                           operation="iterative_development_cycle") as correlation_id:
+            self.logger.info(f"Starting iterative development cycle for {specification_path}",
+                           extra_data={
+                               'specification_path': specification_path,
+                               'target_quality_score': target_quality_score,
+                               'include_docker': include_docker,
+                               'max_iterations': self.max_iterations
+                           })
+            
+            # Load and validate specification
+            with self.logger.timed_operation("load_specification", 
+                                           specification_path=specification_path):
+                spec_result = await self._load_specification(specification_path)
+                
+            if not spec_result["success"]:
+                self.logger.error("Failed to load specification", 
+                                extra_data={'spec_result': spec_result})
+                return {"success": False, "error": "Failed to load specification", "details": spec_result}
+            
+            specification = spec_result["specification"]
         
         # Initialize iteration tracking
         cycle_result = {
@@ -100,15 +114,18 @@ class IterativeOrchestrator:
         
         # Iterative development loop
         for iteration in range(1, self.max_iterations + 1):
-            self.logger.info(f"Starting iteration {iteration}/{self.max_iterations}")
+            self.logger.log_iteration_start(iteration, self.max_iterations, target_quality_score)
             
-            iteration_result = await self._run_iteration(
-                specification=specification,
-                previous_implementation=current_implementation,
-                previous_quality_score=current_quality_score,
-                iteration_number=iteration,
-                target_quality_score=target_quality_score
-            )
+            with self.logger.timed_operation(f"iteration_{iteration}", 
+                                           iteration=iteration, 
+                                           target_quality=target_quality_score):
+                iteration_result = await self._run_iteration(
+                    specification=specification,
+                    previous_implementation=current_implementation,
+                    previous_quality_score=current_quality_score,
+                    iteration_number=iteration,
+                    target_quality_score=target_quality_score
+                )
             
             cycle_result["iterations"].append(iteration_result)
             
@@ -116,30 +133,49 @@ class IterativeOrchestrator:
                 current_implementation = iteration_result["implementation"]
                 current_quality_score = iteration_result["quality_score"]
                 
+                self.logger.log_iteration_complete(
+                    iteration, 
+                    current_quality_score,
+                    iteration_result.get("improvements", []),
+                    iteration_result.get("issues_addressed", [])
+                )
+                
                 # Check if we've reached target quality
                 if current_quality_score >= target_quality_score:
-                    self.logger.info(f"Target quality score {target_quality_score} achieved: {current_quality_score}")
+                    self.logger.info(f"Target quality score {target_quality_score} achieved: {current_quality_score}",
+                                   quality_score=current_quality_score,
+                                   iteration=iteration)
                     cycle_result["success"] = True
                     break
                     
             else:
-                self.logger.warning(f"Iteration {iteration} failed: {iteration_result.get('error', 'Unknown error')}")
-                
+                self.logger.warning(f"Iteration {iteration} failed: {iteration_result.get('error', 'Unknown error')}",
+                                  iteration=iteration,
+                                  extra_data={'error': iteration_result.get('error')})
+            
         # Set final results
         if current_implementation:
             cycle_result["final_implementation"] = current_implementation
             cycle_result["final_quality_score"] = current_quality_score
             cycle_result["success"] = current_quality_score >= target_quality_score
-            
+        
         # Generate Docker artifacts if requested and we have a good implementation
         if include_docker and cycle_result["success"]:
-            docker_result = await self._generate_docker_artifacts(current_implementation)
-            cycle_result["docker_artifacts"] = docker_result
-            
+            with self.logger.timed_operation("generate_docker_artifacts"):
+                docker_result = await self._generate_docker_artifacts(current_implementation)
+                cycle_result["docker_artifacts"] = docker_result
+                
         # Generate cycle summary
         cycle_result["cycle_summary"] = self._generate_cycle_summary(cycle_result)
         
-        self.logger.info(f"Iterative development cycle completed. Success: {cycle_result['success']}")
+        self.logger.info(f"Iterative development cycle completed. Success: {cycle_result['success']}",
+                       extra_data={
+                           'cycle_success': cycle_result['success'],
+                           'final_quality_score': cycle_result.get('final_quality_score', 0),
+                           'iterations_completed': len(cycle_result['iterations']),
+                           'correlation_id': correlation_id
+                       })
+        
         return cycle_result
 
     async def _run_iteration(self,
@@ -166,42 +202,69 @@ class IterativeOrchestrator:
         
         try:
             # Phase 1: Generate/Refine Implementation
-            self.logger.info(f"Iteration {iteration_number}: Generating implementation")
-            
-            if previous_implementation is None:
-                # First iteration - generate initial implementation
-                impl_result = await self._generate_initial_implementation(specification)
-            else:
-                # Subsequent iterations - refine based on feedback
-                impl_result = await self._refine_implementation(
-                    specification=specification,
-                    previous_implementation=previous_implementation,
-                    previous_analysis=self.iteration_history[-1].get("analysis_results") if self.iteration_history else {},
-                    target_quality_score=target_quality_score
-                )
-            
-            if not impl_result["success"]:
-                iteration_result["error"] = f"Implementation generation failed: {impl_result.get('error')}"
-                return iteration_result
+            with self.logger.timed_operation(f"iteration_{iteration_number}_phase_1_implementation", 
+                                           iteration=iteration_number):
+                self.logger.info(f"Iteration {iteration_number}: Generating implementation",
+                               iteration=iteration_number)
                 
-            implementation = impl_result["implementation"]
-            iteration_result["implementation"] = implementation
+                if previous_implementation is None:
+                    # First iteration - generate initial implementation
+                    impl_result = await self._generate_initial_implementation(specification)
+                else:
+                    # Subsequent iterations - refine based on feedback
+                    impl_result = await self._refine_implementation(
+                        specification=specification,
+                        previous_implementation=previous_implementation,
+                        previous_analysis=self.iteration_history[-1].get("analysis_results") if self.iteration_history else {},
+                        target_quality_score=target_quality_score
+                    )
+                
+                if not impl_result["success"]:
+                    iteration_result["error"] = f"Implementation generation failed: {impl_result.get('error')}"
+                    self.logger.error(f"Implementation generation failed in iteration {iteration_number}",
+                                    iteration=iteration_number,
+                                    extra_data={'error': impl_result.get('error')})
+                    return iteration_result
+                    
+                implementation = impl_result["implementation"]
+                iteration_result["implementation"] = implementation
+                
+                # Log code generation metrics
+                if isinstance(implementation, dict) and "main_module" in implementation:
+                    lines_count = len(implementation["main_module"].split('\n'))
+                    self.logger.log_code_generation(
+                        framework=implementation.get("metadata", {}).get("framework", "unknown"),
+                        optimization_level=implementation.get("metadata", {}).get("optimization_level", "unknown"),
+                        scenarios_count=implementation.get("metadata", {}).get("scenarios_count", 0),
+                        lines_generated=lines_count
+                    )
             
             # Phase 2: Run Tests
-            self.logger.info(f"Iteration {iteration_number}: Running tests")
-            
-            test_result = await self._run_comprehensive_tests(implementation)
-            iteration_result["test_results"] = test_result
+            with self.logger.timed_operation(f"iteration_{iteration_number}_phase_2_testing", 
+                                           iteration=iteration_number):
+                self.logger.info(f"Iteration {iteration_number}: Running tests", iteration=iteration_number)
+                
+                test_result = await self._run_comprehensive_tests(implementation)
+                iteration_result["test_results"] = test_result
             
             # Phase 3: Analyze Code Quality
-            self.logger.info(f"Iteration {iteration_number}: Analyzing code quality")
-            
-            analysis_result = await self._analyze_implementation_quality(implementation)
-            iteration_result["analysis_results"] = analysis_result
+            with self.logger.timed_operation(f"iteration_{iteration_number}_phase_3_analysis", 
+                                           iteration=iteration_number):
+                self.logger.info(f"Iteration {iteration_number}: Analyzing code quality", iteration=iteration_number)
+                
+                analysis_result = await self._analyze_implementation_quality(implementation)
+                iteration_result["analysis_results"] = analysis_result
             
             # Phase 4: Calculate Quality Score and Determine Next Steps
             quality_score = self._calculate_iteration_quality_score(test_result, analysis_result)
             iteration_result["quality_score"] = quality_score
+            
+            self.logger.log_quality_metrics(f"iteration_{iteration_number}", {
+                'quality_score': quality_score,
+                'test_success': test_result.get("overall_success", False),
+                'code_quality_score': analysis_result.get("code_quality", {}).get("overall_score", 0),
+                'performance_score': analysis_result.get("performance_analysis", {}).get("performance_score", 0)
+            })
             
             # Phase 5: Identify Improvements and Issues Addressed
             if previous_implementation:
@@ -217,7 +280,8 @@ class IterativeOrchestrator:
             self.iteration_history.append(iteration_result)
             
         except Exception as e:
-            self.logger.error(f"Iteration {iteration_number} failed with exception: {e}")
+            self.logger.error(f"Iteration {iteration_number} failed with exception: {e}",
+                            iteration=iteration_number)
             iteration_result["error"] = str(e)
             
         return iteration_result

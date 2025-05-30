@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 from pathlib import Path
+from core.sdd_logger import get_logger
 
 
 @dataclass
@@ -54,7 +55,7 @@ class BaseMCPServer(ABC):
         self.tools: Dict[str, MCPTool] = {}
         self.resources: Dict[str, MCPResource] = {}
         self.prompts: Dict[str, MCPPrompt] = {}
-        self.logger = logging.getLogger(f"mcp.{name}")
+        self.logger = get_logger(f"sdd.mcp.{name}")
         
         # Initialize AI client for tool implementations
         self._init_ai_client()
@@ -193,27 +194,43 @@ class BaseMCPServer(ABC):
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
 
-        if tool_name not in self.tools:
-            return self._error_response(request_id, "TOOL_NOT_FOUND", f"Tool not found: {tool_name}")
-
-        try:
-            tool = self.tools[tool_name]
-            result = await tool.handler(**arguments)
+        with self.logger.correlation_context(component=f"mcp.{self.name}", 
+                                           operation=f"tool_call.{tool_name}",
+                                           request_id=str(request_id)):
             
-            return {
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "result": {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": str(result)
-                        }
-                    ]
+            self.logger.log_mcp_call(self.name, tool_name, arguments)
+
+            if tool_name not in self.tools:
+                error_msg = f"Tool not found: {tool_name}"
+                self.logger.log_mcp_call(self.name, tool_name, arguments, error=error_msg)
+                return self._error_response(request_id, "TOOL_NOT_FOUND", error_msg)
+
+            try:
+                tool = self.tools[tool_name]
+                
+                with self.logger.timed_operation(f"execute_tool.{tool_name}", 
+                                               tool_name=tool_name, 
+                                               arguments_keys=list(arguments.keys())):
+                    result = await tool.handler(**arguments)
+                
+                self.logger.log_mcp_call(self.name, tool_name, arguments, result=result)
+                
+                return {
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "result": {
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": str(result)
+                            }
+                        ]
+                    }
                 }
-            }
-        except Exception as e:
-            return self._error_response(request_id, "TOOL_ERROR", f"Tool execution failed: {e}")
+            except Exception as e:
+                error_msg = f"Tool execution failed: {e}"
+                self.logger.log_mcp_call(self.name, tool_name, arguments, error=error_msg)
+                return self._error_response(request_id, "TOOL_ERROR", error_msg)
 
     async def _handle_resources_list(self, request_id: Any) -> Dict[str, Any]:
         """Handle resources/list request."""

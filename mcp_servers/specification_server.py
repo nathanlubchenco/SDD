@@ -3,6 +3,7 @@ import asyncio
 from typing import Dict, List, Optional
 from pathlib import Path
 import yaml
+from core.sdd_logger import get_logger
 
 
 class SpecificationMCPServer:
@@ -12,68 +13,130 @@ class SpecificationMCPServer:
         self.name = "specification-server"
         self.spec_dir = spec_directory
         self.spec_dir.mkdir(parents=True, exist_ok=True)
+        self.logger = get_logger(f"sdd.{self.name}")
         self.specs = self._load_specifications()
         self.scenario_cache = {}
 
     def _load_specifications(self) -> Dict:
         """Load all specification files"""
         specs = {}
-        for spec_file in self.spec_dir.glob("**/*.yaml"):
-            with open(spec_file) as f:
-                domain = spec_file.stem
-                specs[domain] = yaml.safe_load(f)
+        with self.logger.timed_operation("load_specifications"):
+            for spec_file in self.spec_dir.glob("**/*.yaml"):
+                try:
+                    with open(spec_file) as f:
+                        domain = spec_file.stem
+                        spec_data = yaml.safe_load(f)
+                        specs[domain] = spec_data
+                        
+                        scenarios_count = len(spec_data.get("scenarios", []))
+                        constraints_count = len(spec_data.get("constraints", {}))
+                        
+                        self.logger.log_specification_loaded(
+                            str(spec_file), scenarios_count, constraints_count
+                        )
+                        
+                except Exception as e:
+                    self.logger.error(f"Failed to load specification {spec_file}: {e}")
+                    
+        self.logger.info(f"Loaded {len(specs)} specifications", 
+                        extra_data={'domains': list(specs.keys())})
         return specs
 
     async def get_scenarios(self, domain: str, feature: Optional[str] = None,
                             include_constraints: bool = True) -> Dict:
         """Retrieve scenarios with full context"""
+        
+        with self.logger.correlation_context(component="specification-server", 
+                                           operation="get_scenarios"):
+            self.logger.debug(f"Getting scenarios for domain: {domain}", 
+                            extra_data={'feature': feature, 'include_constraints': include_constraints})
 
-        if domain not in self.specs:
-            return {"error": f"Domain '{domain}' not found"}
+            if domain not in self.specs:
+                self.logger.warning(f"Domain '{domain}' not found", 
+                                  extra_data={'available_domains': list(self.specs.keys())})
+                return {"error": f"Domain '{domain}' not found"}
 
-        domain_spec = self.specs[domain]
-        scenarios = domain_spec.get("scenarios", [])
+            domain_spec = self.specs[domain]
+            scenarios = domain_spec.get("scenarios", [])
 
-        # Filter by feature if specified
-        if feature:
-            scenarios = [s for s in scenarios if s.get("feature") == feature]
+            # Filter by feature if specified
+            if feature:
+                original_count = len(scenarios)
+                scenarios = [s for s in scenarios if s.get("feature") == feature]
+                self.logger.debug(f"Filtered scenarios by feature '{feature}': {len(scenarios)}/{original_count}")
 
-        result = {
-            "domain": domain,
-            "scenarios": scenarios,
-            "total_count": len(scenarios)
-        }
+            result = {
+                "domain": domain,
+                "scenarios": scenarios,
+                "total_count": len(scenarios)
+            }
 
-        # Include constraints if requested
-        if include_constraints:
-            result["constraints"] = domain_spec.get("constraints", {})
-            result["global_constraints"] = self.specs.get("global", {}).get("constraints", {})
+            # Include constraints if requested
+            if include_constraints:
+                result["constraints"] = domain_spec.get("constraints", {})
+                result["global_constraints"] = self.specs.get("global", {}).get("constraints", {})
 
-        return result
+            self.logger.info(f"Retrieved {len(scenarios)} scenarios for domain '{domain}'",
+                           extra_data={
+                               'domain': domain,
+                               'scenarios_count': len(scenarios),
+                               'constraints_included': include_constraints,
+                               'feature_filter': feature
+                           })
+
+            return result
 
     async def validate_scenario(self, scenario: Dict, domain: str,
                                 check_conflicts: bool = True,
                                 check_completeness: bool = True) -> Dict:
         """Validate scenario for conflicts and completeness"""
+        
+        with self.logger.correlation_context(component="specification-server", 
+                                           operation="validate_scenario"):
+            scenario_name = scenario.get('name', 'unnamed')
+            self.logger.debug(f"Validating scenario '{scenario_name}' in domain '{domain}'",
+                            extra_data={
+                                'scenario_name': scenario_name,
+                                'domain': domain,
+                                'check_conflicts': check_conflicts,
+                                'check_completeness': check_completeness
+                            })
 
-        validation_result = {
-            "valid": True,
-            "conflicts": [],
-            "warnings": [],
-            "suggestions": []
-        }
+            validation_result = {
+                "valid": True,
+                "conflicts": [],
+                "warnings": [],
+                "suggestions": []
+            }
 
-        if check_conflicts:
-            conflicts = await self._check_conflicts(scenario, domain)
-            validation_result["conflicts"] = conflicts
-            validation_result["valid"] = len(conflicts) == 0
+            if check_conflicts:
+                conflicts = await self._check_conflicts(scenario, domain)
+                validation_result["conflicts"] = conflicts
+                validation_result["valid"] = len(conflicts) == 0
+                
+                if conflicts:
+                    self.logger.warning(f"Found {len(conflicts)} conflicts for scenario '{scenario_name}'",
+                                      extra_data={'conflicts': conflicts})
 
-        if check_completeness:
-            completeness = await self._check_completeness(scenario, domain)
-            validation_result["warnings"].extend(completeness["warnings"])
-            validation_result["suggestions"].extend(completeness["suggestions"])
+            if check_completeness:
+                completeness = await self._check_completeness(scenario, domain)
+                validation_result["warnings"].extend(completeness["warnings"])
+                validation_result["suggestions"].extend(completeness["suggestions"])
+                
+                if completeness["warnings"]:
+                    self.logger.warning(f"Completeness issues for scenario '{scenario_name}'",
+                                      extra_data=completeness)
 
-        return validation_result
+            self.logger.info(f"Scenario validation complete: {scenario_name} - {'valid' if validation_result['valid'] else 'invalid'}",
+                           extra_data={
+                               'scenario_name': scenario_name,
+                               'domain': domain,
+                               'is_valid': validation_result["valid"],
+                               'conflicts_count': len(validation_result["conflicts"]),
+                               'warnings_count': len(validation_result["warnings"])
+                           })
+
+            return validation_result
 
     async def _check_conflicts(self, scenario: Dict, domain: str) -> List[Dict]:
         """Check for conflicts with existing scenarios"""
