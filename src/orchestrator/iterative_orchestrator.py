@@ -578,9 +578,12 @@ class IterativeOrchestrator:
         }
         
         try:
+            # Normalize implementation format first
+            normalized_impl = self._normalize_implementation_format(implementation)
+            
             # Extract code from implementation
-            main_code = implementation.get("main_module", "")
-            test_code = implementation.get("test_module", "")
+            main_code = normalized_impl.get("main_module", "")
+            test_code = normalized_impl.get("test_module", "")
             
             # 1. Validate syntax
             syntax_request = {
@@ -683,8 +686,11 @@ class IterativeOrchestrator:
         }
         
         try:
-            main_code = implementation.get("main_module", "")
-            test_code = implementation.get("test_module", "")
+            # Normalize implementation format first
+            normalized_impl = self._normalize_implementation_format(implementation)
+            
+            main_code = normalized_impl.get("main_module", "")
+            test_code = normalized_impl.get("test_module", "")
             
             # 1. Comprehensive code quality analysis
             quality_request = {
@@ -902,8 +908,11 @@ class IterativeOrchestrator:
     async def _generate_docker_artifacts(self, implementation: Dict[str, Any]) -> Dict[str, Any]:
         """Generate Docker artifacts for the final implementation."""
         try:
+            # Normalize implementation format first (defensive)
+            normalized_impl = self._normalize_implementation_format(implementation)
+            
             # Extract dependencies from implementation
-            main_code = implementation.get("main_module", "")
+            main_code = normalized_impl.get("main_module", "")
             
             # Use DockerMCPServer to generate Dockerfile
             dockerfile_request = {
@@ -926,8 +935,8 @@ class IterativeOrchestrator:
                 "params": {
                     "name": "generate_docker_compose",
                     "arguments": {
-                        "service_name": implementation.get("service_name", "app"),
-                        "dependencies": implementation.get("dependencies", []),
+                        "service_name": normalized_impl.get("service_name", "app"),
+                        "dependencies": normalized_impl.get("dependencies", []),
                         "environment": "production"
                     }
                 }

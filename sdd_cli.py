@@ -341,55 +341,80 @@ Examples:
                 
                 print(f"🔄 Iterations used: {len(iterations)}")
                 
-                # Try to write implementation to output directory if it exists
-                if has_implementation and not output_dir.exists():
+                # Try to write implementation to output directory
+                if has_implementation or final_implementation:
                     output_dir.mkdir(parents=True, exist_ok=True)
                     
-                    # Get the best implementation from iterations
-                    for iter_result in reversed(iterations):
-                        impl = iter_result.get('implementation')
-                        
-                        # Handle MCP-format responses (list with text content)
-                        if impl and isinstance(impl, list) and impl:
-                            try:
-                                impl_text = impl[0].get('text', '{}')
-                                # Try JSON first, then ast.literal_eval for Python dict format
+                    # Use final_implementation if available (preferred), otherwise use latest iteration
+                    impl = None
+                    
+                    if final_implementation and isinstance(final_implementation, dict):
+                        impl = final_implementation
+                        if not args.quiet:
+                            print(f"🔍 Using final_implementation for file extraction")
+                    elif iterations:
+                        # Fallback to latest iteration implementation
+                        for iter_result in reversed(iterations):
+                            iter_impl = iter_result.get('implementation')
+                            
+                            # Handle MCP-format responses (list with text content)
+                            if iter_impl and isinstance(iter_impl, list) and iter_impl:
                                 try:
-                                    impl = json.loads(impl_text)
-                                except json.JSONDecodeError:
-                                    impl = ast.literal_eval(impl_text)
-                            except (json.JSONDecodeError, ValueError, KeyError, IndexError, SyntaxError):
-                                if not args.quiet:
-                                    print(f"⚠️  Could not parse implementation from MCP response")
-                                continue
-                        
-                        if impl and isinstance(impl, dict):
-                            try:
-                                # Write main module
-                                main_code = impl.get('main_module', '')
-                                if main_code:
-                                    main_file = output_dir / f"{output_dir.name}.py"
-                                    with open(main_file, 'w') as f:
-                                        f.write(main_code)
-                                
-                                # Write test module
-                                test_code = impl.get('test_module', '')
-                                if test_code:
-                                    test_file = output_dir / f"test_{output_dir.name}.py"
-                                    with open(test_file, 'w') as f:
-                                        f.write(test_code)
-                                
-                                # Write requirements
-                                deps = impl.get('dependencies', [])
-                                if deps:
-                                    req_file = output_dir / "requirements.txt"
-                                    with open(req_file, 'w') as f:
-                                        f.write('\n'.join(deps))
-                                
+                                    impl_text = iter_impl[0].get('text', '{}')
+                                    # Try JSON first, then ast.literal_eval for Python dict format
+                                    try:
+                                        impl = json.loads(impl_text)
+                                    except json.JSONDecodeError:
+                                        impl = ast.literal_eval(impl_text)
+                                    break
+                                except (json.JSONDecodeError, ValueError, KeyError, IndexError, SyntaxError):
+                                    if not args.quiet:
+                                        print(f"⚠️  Could not parse implementation from MCP response")
+                                    continue
+                            elif iter_impl and isinstance(iter_impl, dict):
+                                impl = iter_impl
                                 break
-                            except Exception as e:
-                                if not args.quiet:
-                                    print(f"⚠️  Note: Could not extract files automatically: {e}")
+                        
+                        if impl and not args.quiet:
+                            print(f"🔍 Using iteration implementation for file extraction")
+                    
+                    if impl and isinstance(impl, dict):
+                        try:
+                            files_written = []
+                            
+                            # Write main module
+                            main_code = impl.get('main_module', '')
+                            if main_code:
+                                main_file = output_dir / f"{output_dir.name}.py"
+                                with open(main_file, 'w') as f:
+                                    f.write(main_code)
+                                files_written.append(main_file.name)
+                            
+                            # Write test module
+                            test_code = impl.get('test_module', '')
+                            if test_code:
+                                test_file = output_dir / f"test_{output_dir.name}.py"
+                                with open(test_file, 'w') as f:
+                                    f.write(test_code)
+                                files_written.append(test_file.name)
+                            
+                            # Write requirements
+                            deps = impl.get('dependencies', [])
+                            if deps:
+                                req_file = output_dir / "requirements.txt"
+                                with open(req_file, 'w') as f:
+                                    f.write('\n'.join(deps))
+                                files_written.append(req_file.name)
+                            
+                            if files_written and not args.quiet:
+                                print(f"✅ Successfully extracted {len(files_written)} files")
+                                
+                        except Exception as e:
+                            if not args.quiet:
+                                print(f"⚠️  Note: Could not extract files automatically: {e}")
+                    else:
+                        if not args.quiet:
+                            print(f"⚠️  No valid implementation found for file extraction")
                 
                 print(f"\n📁 Output directory: {output_dir}")
                 if output_dir.exists():
