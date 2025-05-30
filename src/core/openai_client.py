@@ -10,9 +10,19 @@ def chat_completion(messages, model="gpt-4o", temperature=0.0, max_tokens=None):
     params = {
         "model": model,
         "messages": messages,
-        "temperature": temperature,
     }
-    if max_tokens is not None:
-        params["max_tokens"] = max_tokens
+    
+    # Handle o3 model parameter restrictions
+    if model and "o3" in model:
+        # o3 model only supports default temperature (1) and no max_tokens
+        params["temperature"] = 1
+    else:
+        # Use provided temperature for other models
+        params["temperature"] = temperature
+        
+        # Set max_tokens for non-o3 models
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+            
     response = client.chat.completions.create(**params)
     return response.choices[0].message.content

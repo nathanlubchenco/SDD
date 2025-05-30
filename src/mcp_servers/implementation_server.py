@@ -258,7 +258,25 @@ class ImplementationMCPServer(BaseMCPServer):
         if not self.ai_client:
             return {"success": False, "error": "AI client not available for refinement"}
 
-        # Extract current code
+        # Extract current code - handle case where current_implementation might be passed as a list
+        if isinstance(current_implementation, list) and len(current_implementation) > 0:
+            # If it's a list, try to get the first element and parse it
+            impl_data = current_implementation[0]
+            if isinstance(impl_data, dict) and "text" in impl_data:
+                try:
+                    current_implementation = json.loads(impl_data["text"])
+                except (json.JSONDecodeError, KeyError):
+                    current_implementation = {}
+            elif isinstance(impl_data, str):
+                try:
+                    current_implementation = json.loads(impl_data)
+                except json.JSONDecodeError:
+                    current_implementation = {}
+        
+        # Ensure current_implementation is a dict
+        if not isinstance(current_implementation, dict):
+            current_implementation = {}
+            
         current_code = current_implementation.get("main_module", "")
         current_tests = current_implementation.get("test_module", "")
 
