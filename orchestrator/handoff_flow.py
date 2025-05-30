@@ -708,8 +708,41 @@ def _generate_docker_configuration(implementation_code: str, test_code: str, spe
     
     return docker_files
 
+def _extract_imports_from_code(code: str) -> set:
+    """Extract all imported module names from Python code using AST."""
+    import ast
+    
+    imported_modules = set()
+    
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    # Get the top-level module name (e.g., fastapi_limiter from fastapi_limiter.depends)
+                    module_name = alias.name.split('.')[0]
+                    imported_modules.add(module_name)
+            elif isinstance(node, ast.ImportFrom):
+                if node.module:
+                    # Get the top-level module name
+                    module_name = node.module.split('.')[0]
+                    imported_modules.add(module_name)
+    except SyntaxError:
+        # Fallback to regex if AST parsing fails
+        import re
+        import_patterns = [
+            r'from\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+            r'import\s+([a-zA-Z_][a-zA-Z0-9_]*)'
+        ]
+        for pattern in import_patterns:
+            matches = re.findall(pattern, code)
+            imported_modules.update(matches)
+    
+    return imported_modules
+
 def _analyze_code_for_docker(implementation_code: str, test_code: str, spec: dict) -> dict:
-    """Analyze generated code to determine Docker requirements."""
+    """Analyze generated code to determine Docker requirements using AST parsing."""
+    import ast
     import re
     
     analysis = {
@@ -726,29 +759,41 @@ def _analyze_code_for_docker(implementation_code: str, test_code: str, spec: dic
         'health_check_endpoint': None
     }
     
+    # Extract all imports using AST parsing
     combined_code = implementation_code + test_code
+    imported_modules = _extract_imports_from_code(combined_code)
     
-    # Detect dependencies from imports
-    import_patterns = [
-        (r'from fastapi import|import fastapi', 'fastapi', True, [8000]),
-        (r'from flask import|import flask', 'flask', True, [5000]),
-        (r'from django import|import django', 'django', True, [8000]),
-        (r'import jwt|from jwt import', 'PyJWT', False, []),
-        (r'import asyncio|async def', 'asyncio', False, []),
-        (r'import redis|from redis import', 'redis', False, []),
-        (r'import psycopg2|from psycopg2 import', 'psycopg2-binary', False, []),
-        (r'import pymongo|from pymongo import', 'pymongo', False, []),
-        (r'from sqlalchemy import|import sqlalchemy', 'sqlalchemy', False, []),
-        (r'from pydantic import|import pydantic', 'pydantic', False, []),
-        (r'import celery|from celery import', 'celery', False, []),
-        (r'from prometheus_client import|import prometheus_client', 'prometheus-client', False, []),
-        (r'import logging', 'built-in', False, []),
-    ]
+    # Package mapping - map module names to pip package names
+    package_mapping = {
+        'fastapi': ('fastapi', True, [8000]),
+        'fastapi_limiter': ('fastapi-limiter', False, []),
+        'flask': ('flask', True, [5000]),
+        'django': ('django', True, [8000]),
+        'jwt': ('PyJWT', False, []),
+        'redis': ('redis', False, []),
+        'psycopg2': ('psycopg2-binary', False, []),
+        'pymongo': ('pymongo', False, []),
+        'sqlalchemy': ('sqlalchemy', False, []),
+        'pydantic': ('pydantic', False, []),
+        'celery': ('celery', False, []),
+        'prometheus_client': ('prometheus-client', False, []),
+        'uvicorn': ('uvicorn', False, []),
+        'aiofiles': ('aiofiles', False, []),
+        'starlette': ('starlette', False, []),
+        'passlib': ('passlib', False, []),
+        'bcrypt': ('bcrypt', False, []),
+        'cryptography': ('cryptography', False, []),
+        'requests': ('requests', False, []),
+        'httpx': ('httpx', False, []),
+        'jinja2': ('jinja2', False, []),
+        'aioredis': ('aioredis', False, []),
+    }
     
-    for pattern, dependency, is_web_server, default_ports in import_patterns:
-        if re.search(pattern, combined_code, re.IGNORECASE):
-            if dependency != 'built-in':
-                analysis['dependencies'].add(dependency)
+    # Analyze imports and add dependencies
+    for module in imported_modules:
+        if module in package_mapping:
+            package_name, is_web_server, default_ports = package_mapping[module]
+            analysis['dependencies'].add(package_name)
             if is_web_server:
                 analysis['has_web_server'] = True
                 analysis['ports'].extend(default_ports)
@@ -756,6 +801,11 @@ def _analyze_code_for_docker(implementation_code: str, test_code: str, spec: dic
     # Detect async usage
     if re.search(r'async def|await ', combined_code):
         analysis['has_async'] = True
+        
+    # Always add testing dependencies if pytest imports detected
+    if 'pytest' in imported_modules or '@pytest' in combined_code:
+        analysis['dependencies'].add('pytest')
+        analysis['dependencies'].add('pytest-asyncio')
     
     # Detect JWT authentication
     if re.search(r'jwt\.|JWT|token', combined_code, re.IGNORECASE):
@@ -972,11 +1022,13 @@ def _generate_requirements_txt(analysis: dict) -> str:
     # Base requirements mapping with versions
     dependency_versions = {
         'fastapi': 'fastapi>=0.104.0',
+        'fastapi-limiter': 'fastapi-limiter>=0.1.6',
         'uvicorn': 'uvicorn[standard]>=0.24.0',
         'flask': 'flask>=3.0.0',
         'django': 'django>=4.2.0',
         'PyJWT': 'PyJWT>=2.8.0',
         'redis': 'redis>=5.0.0',
+        'aioredis': 'aioredis>=2.0.0',
         'psycopg2-binary': 'psycopg2-binary>=2.9.0',
         'pymongo': 'pymongo>=4.6.0',
         'sqlalchemy': 'sqlalchemy>=2.0.0',
@@ -985,6 +1037,14 @@ def _generate_requirements_txt(analysis: dict) -> str:
         'prometheus-client': 'prometheus-client>=0.19.0',
         'pytest': 'pytest>=7.4.0',
         'pytest-asyncio': 'pytest-asyncio>=0.21.0',
+        'aiofiles': 'aiofiles>=23.2.0',
+        'starlette': 'starlette>=0.27.0',
+        'passlib': 'passlib[bcrypt]>=1.7.4',
+        'bcrypt': 'bcrypt>=4.0.0',
+        'cryptography': 'cryptography>=41.0.0',
+        'requests': 'requests>=2.31.0',
+        'httpx': 'httpx>=0.25.0',
+        'jinja2': 'jinja2>=3.1.2',
     }
     
     requirements = []
