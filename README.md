@@ -346,15 +346,6 @@ result = await orchestrator.iterative_development_cycle(
 - **Reduced technical debt** - Continuous improvement built-in
 - **Scalable engineering** - AI handles the implementation details
 
-## Contributing
-
-This is an active research project. We welcome contributions in:
-
-- **Prompt engineering** for better AI code generation
-- **Quality metrics** and analysis techniques
-- **Framework support** for different languages/platforms
-- **Real-world examples** and case studies
-
 ## Documentation
 
 - **[Iterative Development Guide](docs/ITERATIVE_DEVELOPMENT.md)** - Complete system overview
@@ -365,3 +356,5 @@ This is an active research project. We welcome contributions in:
 ---
 
 **This system represents a fundamental breakthrough in AI-powered software engineering, enabling AI that can debug, test, and improve its own code automatically. It's the foundation for truly autonomous software development.** 🚀🤖
+
+However, right now as disclosed at the top, its complete vaporware.  An exercise in learning about using agentic coding systems.  Will it ever work, i'm not sure, but i'm learning a lot along the way.
