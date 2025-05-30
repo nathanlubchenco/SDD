@@ -10,11 +10,11 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 from pathlib import Path
-from ..mcp_servers.specification_mcp_server import SpecificationMCPServer
-from ..mcp_servers.implementation_server import ImplementationMCPServer
-from ..mcp_servers.testing_mcp_server import TestingMCPServer
-from ..mcp_servers.analysis_mcp_server import AnalysisMCPServer
-from ..mcp_servers.docker_mcp_server import DockerMCPServer
+from mcp_servers.specification_mcp_server import SpecificationMCPServer
+from mcp_servers.implementation_server import ImplementationMCPServer
+from mcp_servers.testing_mcp_server import TestingMCPServer
+from mcp_servers.analysis_mcp_server import AnalysisMCPServer
+from mcp_servers.docker_mcp_server import DockerMCPServer
 
 
 class IterativeOrchestrator:
@@ -35,7 +35,7 @@ class IterativeOrchestrator:
         self.logger = logging.getLogger(__name__)
         
         # Initialize MCP servers
-        self.spec_server = SpecificationMCPServer()
+        self.spec_server = SpecificationMCPServer(Path("specs"))
         self.impl_server = ImplementationMCPServer()
         self.test_server = TestingMCPServer()
         self.analysis_server = AnalysisMCPServer()

@@ -107,7 +107,8 @@ class DataProcessor:
                     for i, line in enumerate(lines, 1):
                         print(f"  {i:2d}: {line}")
                     if len(refined_code.split('\n')) > 10:
-                        print(f"  ... (showing first 10 lines of {len(refined_code.split('\n'))} total)")
+                        total_lines = len(refined_code.split('\n'))
+                        print(f"  ... (showing first 10 lines of {total_lines} total)")
                 else:
                     print("  No refined code available")
     else:

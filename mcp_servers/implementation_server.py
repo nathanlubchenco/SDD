@@ -690,30 +690,8 @@ Focus on creating high-quality, maintainable code that meets the target quality 
                                                 framework: str) -> Dict[str, Any]:
         """Fallback implementation when AI is not available."""
         
-        # Import existing handoff flow for fallback
-        try:
-            from ..orchestrator.handoff_flow import generate_implementation, generate_tests, _generate_filenames
-            
-            # Convert scenarios to old format
-            spec = {"scenarios": scenarios, "constraints": constraints}
-            
-            implementation_code = generate_implementation(spec)
-            test_code = generate_tests(spec)
-            filenames = _generate_filenames(spec)
-            
-            return {
-                "main_module": implementation_code,
-                "test_module": test_code,
-                "dependencies": ["fastapi", "pydantic", "pytest"],
-                "service_name": filenames.get("module_name", "service"),
-                "module_name": filenames.get("module_name", "main"),
-                "key_classes": [],
-                "key_functions": [],
-                "metadata": {"generated_with_ai": False, "fallback_used": True}
-            }
-
-        except ImportError:
-            return self._fallback_implementation_structure()
+        # Since handoff_flow has been archived, provide a simple fallback
+        return self._fallback_implementation_structure()
 
     def _fallback_implementation_structure(self) -> Dict[str, Any]:
         """Basic fallback implementation structure."""
@@ -812,3 +790,71 @@ setup(
                     exports.append(class_name)
                     
         return exports
+
+    # Required abstract method implementations
+
+    async def _read_resource(self, uri: str) -> str:
+        """Read implementation-specific resources."""
+        if uri == "implementation://templates/basic":
+            return """# Basic implementation template
+class Service:
+    def __init__(self):
+        pass
+    
+    def process(self, data):
+        return {"status": "processed", "data": data}
+"""
+        elif uri == "implementation://examples/microservice":
+            return """# FastAPI microservice template
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class RequestModel(BaseModel):
+    data: str
+
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+@app.post("/process")
+def process(request: RequestModel):
+    return {"result": f"processed: {request.data}"}
+"""
+        return f"Resource not found: {uri}"
+
+    async def _get_prompt(self, name: str, arguments: Dict[str, Any]) -> str:
+        """Generate implementation-specific prompts."""
+        if name == "implementation_generation":
+            scenarios = arguments.get("scenarios", [])
+            constraints = arguments.get("constraints", {})
+            
+            return f"""
+Generate a Python implementation for these scenarios:
+
+Scenarios:
+{json.dumps(scenarios, indent=2)}
+
+Constraints:
+{json.dumps(constraints, indent=2)}
+
+Create clean, well-documented code with proper error handling.
+"""
+        elif name == "code_refinement":
+            code = arguments.get("code", "")
+            issues = arguments.get("issues", [])
+            
+            return f"""
+Refine this code to address the identified issues:
+
+Code:
+{code}
+
+Issues to fix:
+{json.dumps(issues, indent=2)}
+
+Improve the code while maintaining functionality.
+"""
+        
+        return f"Prompt template not found: {name}"

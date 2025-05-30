@@ -53,8 +53,8 @@ export OPENAI_API_KEY="your-api-key-here"
 
 ```bash
 # Build and run the development environment
-docker-compose up -d
-docker-compose exec python bash
+docker compose up -d
+docker compose exec python bash
 
 # Inside container
 pip install -r requirements.txt
@@ -62,11 +62,22 @@ pip install -r requirements.txt
 
 ## Usage Examples
 
-### 1. Quick Demo of Iterative AI Development
+### 1. Quick Demo of System Architecture (No API Key Required)
+
+See the system components and architecture:
+
+```bash
+python examples/simple_demo.py
+```
+
+This shows the MCP server architecture, workspace structure, and iterative development process without requiring API access.
+
+### 2. Full AI Development Demo (Requires OpenAI API Key)
 
 Experience AI improving its own code:
 
 ```bash
+export OPENAI_API_KEY="your-api-key-here"
 python examples/iterative_development_demo.py
 ```
 
@@ -76,7 +87,7 @@ This demonstrates:
 - Automatically refining code to improve quality scores
 - Complete development cycles from specification to implementation
 
-### 2. Generate Code from Specification
+### 3. Generate Code from Specification
 
 Create a specification file `my_service.yaml`:
 
@@ -120,7 +131,7 @@ print(f"Final Quality Score: {result['final_quality_score']}/100")
 print(f"Iterations: {len(result['iterations'])}")
 ```
 
-### 3. Improve Existing Code
+### 4. Improve Existing Code
 
 Test and improve any Python code:
 
@@ -150,14 +161,18 @@ print(f"Refined score: {result.get('refined_quality_score')}")
 
 ## Running Tests
 
-### Test the Iterative Development System
+### Test the System
 
 ```bash
-# Run the interactive demo
-python examples/iterative_development_demo.py
-
-# Test individual MCP servers
+# Test basic system functionality (no API key required)
 python -m pytest tests/ -v
+
+# Demo the system architecture (no API key required)
+python examples/simple_demo.py
+
+# Full AI development demo (requires OpenAI API key)
+export OPENAI_API_KEY="your-api-key-here"
+python examples/iterative_development_demo.py
 
 # Test specific scenarios from examples
 cd examples/task_manager
@@ -212,8 +227,8 @@ cd workspaces/my_service/implementation
 # Build the Docker image
 docker build -t my-service .
 
-# Run with docker-compose
-docker-compose up -d
+# Run with docker compose
+docker compose up -d
 
 # Test the service
 curl http://localhost:8000/health
@@ -227,7 +242,7 @@ docker ps
 docker logs my-service
 
 # Run integration tests against the container
-docker-compose exec my-service python -m pytest
+docker compose exec my-service python -m pytest
 
 # Performance testing
 docker stats my-service
@@ -277,7 +292,7 @@ workspaces/
 │   ├── test_my_service.py  # Comprehensive tests
 │   ├── requirements.txt    # Dependencies
 │   ├── Dockerfile          # Optimized container
-│   ├── docker-compose.yml  # Deployment config
+│   ├── docker-compose.yml  # Container orchestration
 │   └── __init__.py         # Module exports
 ```
 
