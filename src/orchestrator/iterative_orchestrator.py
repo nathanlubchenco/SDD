@@ -545,26 +545,36 @@ class IterativeOrchestrator:
             if response.get("error"):
                 return {"success": False, "error": response["error"]}
                 
+            # The implementation server already returns the correct format
+            # {"success": True, "implementation": refined_implementation}
             content = response.get("result", {}).get("content", [])
             if isinstance(content, list) and content:
                 try:
                     text_content = content[0].get("text", "{}")
-                    # First try to parse as JSON
+                    # Parse the response from the implementation server
                     try:
-                        implementation = json.loads(text_content)
+                        server_response = json.loads(text_content)
                     except json.JSONDecodeError:
-                        # If that fails, try to evaluate as Python literal (for string dict representations)
+                        # If that fails, try to evaluate as Python literal
                         import ast
-                        implementation = ast.literal_eval(text_content)
+                        server_response = ast.literal_eval(text_content)
                     
-                    return {
-                        "success": True,
-                        "implementation": implementation
-                    }
+                    # Extract the implementation from the server response
+                    if isinstance(server_response, dict) and "implementation" in server_response:
+                        return {
+                            "success": server_response.get("success", True),
+                            "implementation": server_response["implementation"]
+                        }
+                    else:
+                        # Fallback - treat the whole response as the implementation
+                        return {
+                            "success": True,
+                            "implementation": server_response
+                        }
                 except (json.JSONDecodeError, KeyError, ValueError, SyntaxError):
-                    return {"success": False, "error": "Failed to parse implementation response"}
+                    return {"success": False, "error": "Failed to parse refinement response"}
             else:
-                return {"success": False, "error": "No implementation response"}
+                return {"success": False, "error": "No refinement response"}
             
         except Exception as e:
             return {"success": False, "error": str(e)}
