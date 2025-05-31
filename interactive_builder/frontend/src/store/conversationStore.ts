@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import { ConversationState, Message, Entity, Scenario, Constraint } from '@/types/conversation';
 
+interface SuggestedAction {
+  text: string;
+  type: string;
+  priority: number;
+  reasoning: string;
+}
+
 interface ConversationStore {
   // Messages
   messages: Message[];
@@ -22,6 +29,10 @@ interface ConversationStore {
   // Constraints
   addConstraint: (constraint: Omit<Constraint, 'id'>) => void;
   updateConstraint: (id: string, updates: Partial<Constraint>) => void;
+  
+  // Suggested Actions
+  suggestedActions: SuggestedAction[];
+  setSuggestedActions: (actions: SuggestedAction[]) => void;
   
   // WebSocket connection
   connected: boolean;
@@ -48,6 +59,7 @@ const initialConversationState: ConversationState = {
 export const useConversationStore = create<ConversationStore>((set, get) => ({
   messages: [],
   conversationState: initialConversationState,
+  suggestedActions: [],
   connected: false,
   activeTab: 'chat',
 
@@ -148,6 +160,10 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     }));
   },
 
+  setSuggestedActions: (actions) => {
+    set({ suggestedActions: actions });
+  },
+
   setConnected: (connected) => {
     console.log(`🔄 Store: setConnected called with value: ${connected}`);
     set({ connected });
@@ -162,6 +178,7 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
     set({
       messages: [],
       conversationState: initialConversationState,
+      suggestedActions: [],
       connected: false,
       activeTab: 'chat',
     });

@@ -5,7 +5,7 @@ import { socketManager } from '@/lib/socketManager';
 
 export const useWebSocket = () => {
   const socketRef = useRef<Socket | null>(null);
-  const { addMessage, updateConversationState, setConnected, connected } = useConversationStore();
+  const { addMessage, updateConversationState, setConnected, connected, setSuggestedActions } = useConversationStore();
   const listenersSetupRef = useRef(false);
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export const useWebSocket = () => {
 
     socket.on('suggested_actions', (actions) => {
       console.log('🎯 Suggested actions received:', actions);
-      // Could store these in state for UI display
+      setSuggestedActions(actions || []);
     });
 
     socket.on('error', (error) => {

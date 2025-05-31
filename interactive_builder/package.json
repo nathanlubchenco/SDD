@@ -5,6 +5,9 @@
   "scripts": {
     "test": "node tests/websocket_connection.test.js",
     "test:watch": "nodemon tests/websocket_connection.test.js",
+    "test:nlp": "cd backend && python -m pytest tests/enhanced_nlp_test.py -v",
+    "test:nlp-interactive": "cd backend && python tests/enhanced_nlp_test.py",
+    "test:all": "npm run test && npm run test:nlp",
     "start": "./start.sh",
     "setup": "./setup.sh",
     "debug": "./debug.sh",

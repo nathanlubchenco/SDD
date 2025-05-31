@@ -4,6 +4,7 @@ import { useWebSocket } from '@/hooks/useWebSocket';
 import { cn } from '@/lib/utils';
 import { Send, Bot, User, Lightbulb } from 'lucide-react';
 import EntityHighlighter from './EntityHighlighter';
+import SuggestedActions from './SuggestedActions';
 
 const ChatInterface = () => {
   const [inputValue, setInputValue] = useState('');
@@ -33,6 +34,16 @@ const ChatInterface = () => {
     setInputValue('');
     setIsTyping(false);
     sendTyping(false);
+  };
+
+  const handleSuggestedActionClick = (actionText: string) => {
+    if (!connected) return;
+    
+    sendMessage(actionText);
+    // Optionally scroll to bottom to show the new message
+    setTimeout(() => {
+      scrollToBottom();
+    }, 100);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -210,6 +221,9 @@ const ChatInterface = () => {
           <p className="text-xs text-muted-foreground mt-2">You are typing...</p>
         )}
       </div>
+
+      {/* Suggested Actions */}
+      <SuggestedActions onActionClick={handleSuggestedActionClick} />
     </div>
   );
 };

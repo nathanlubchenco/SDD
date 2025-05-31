@@ -11,6 +11,7 @@ from models import (
 from simple_ai_client_complete import SimpleAIClient as AIClient
 from nlp_extractor import NLPExtractor, ExtractedEntity, ExtractedScenario, ExtractedConstraint
 from enhanced_nlp_extractor import EnhancedNLPExtractor, EnhancedEntity
+from contextual_followup_engine import ContextualFollowupEngine, FollowUpQuestion
 
 class ConversationEngine:
     """
@@ -24,6 +25,7 @@ class ConversationEngine:
         self.ai_client = AIClient()
         self.nlp_extractor = NLPExtractor()
         self.enhanced_extractor = EnhancedNLPExtractor()
+        self.followup_engine = ContextualFollowupEngine()
         self.conversation_history: List[Dict[str, str]] = []
         self.detected_domain = None
         
@@ -51,13 +53,37 @@ class ConversationEngine:
         # Extract and update state from the conversation
         await self._extract_and_update_state(user_message)
         
-        # Generate contextual follow-up questions
-        response.suggested_actions = self.nlp_extractor.generate_followup_questions(
-            self.state.discovered_entities,
-            self.state.scenarios, 
-            self.state.constraints,
-            self.state.phase.value
-        )
+        # Generate enhanced contextual follow-up questions
+        try:
+            followup_questions = self.followup_engine.generate_followup_questions(
+                conversation_state=self.state,
+                recent_message=user_message,
+                conversation_history=self.conversation_history,
+                domain_hint=self.detected_domain
+            )
+            
+            # Convert to suggested actions format
+            response.suggested_actions = [
+                {
+                    "text": q.question,
+                    "type": q.type.value,
+                    "priority": q.priority,
+                    "reasoning": q.reasoning
+                }
+                for q in followup_questions[:3]  # Limit to top 3
+            ]
+            
+            print(f"🎯 Generated {len(followup_questions)} contextual follow-up questions")
+            
+        except Exception as e:
+            print(f"⚠️ Contextual follow-up generation failed, using fallback: {e}")
+            # Fallback to basic questions
+            response.suggested_actions = self.nlp_extractor.generate_followup_questions(
+                self.state.discovered_entities,
+                self.state.scenarios, 
+                self.state.constraints,
+                self.state.phase.value
+            )
         
         return {
             "message": response.message,
