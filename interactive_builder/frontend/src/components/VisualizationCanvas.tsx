@@ -1,21 +1,74 @@
+import { useState, useEffect } from 'react';
 import { useConversationStore } from '@/store/conversationStore';
-import { Network, GitBranch, Target } from 'lucide-react';
+import { Network, GitBranch, Target, Sparkles } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 const VisualizationCanvas = () => {
   const { conversationState } = useConversationStore();
+  const [newItems, setNewItems] = useState<Set<string>>(new Set());
+  const [lastCounts, setLastCounts] = useState({ entities: 0, scenarios: 0, constraints: 0 });
+
+  // Track new items for animation
+  useEffect(() => {
+    const currentCounts = {
+      entities: conversationState.discovered_entities.length,
+      scenarios: conversationState.scenarios.length,
+      constraints: conversationState.constraints.length
+    };
+
+    const newItemIds = new Set<string>();
+
+    // Check for new entities
+    if (currentCounts.entities > lastCounts.entities) {
+      const newEntities = conversationState.discovered_entities.slice(lastCounts.entities);
+      newEntities.forEach(entity => newItemIds.add(`entity-${entity.id}`));
+    }
+
+    // Check for new scenarios
+    if (currentCounts.scenarios > lastCounts.scenarios) {
+      const newScenarios = conversationState.scenarios.slice(lastCounts.scenarios);
+      newScenarios.forEach(scenario => newItemIds.add(`scenario-${scenario.id}`));
+    }
+
+    // Check for new constraints
+    if (currentCounts.constraints > lastCounts.constraints) {
+      const newConstraints = conversationState.constraints.slice(lastCounts.constraints);
+      newConstraints.forEach(constraint => newItemIds.add(`constraint-${constraint.id}`));
+    }
+
+    if (newItemIds.size > 0) {
+      setNewItems(newItemIds);
+      // Clear new item highlights after animation
+      setTimeout(() => setNewItems(new Set()), 2000);
+    }
+
+    setLastCounts(currentCounts);
+  }, [conversationState.discovered_entities, conversationState.scenarios, conversationState.constraints]);
+
+  const getEntityTypeColor = (type: string) => {
+    const colors = {
+      actor: 'bg-blue-50 border-blue-200 text-blue-800',
+      data_entity: 'bg-green-50 border-green-200 text-green-800',
+      system_component: 'bg-purple-50 border-purple-200 text-purple-800',
+      business_concept: 'bg-orange-50 border-orange-200 text-orange-800',
+      action_concept: 'bg-pink-50 border-pink-200 text-pink-800',
+      entity: 'bg-gray-50 border-gray-200 text-gray-800'
+    };
+    return colors[type] || colors.entity;
+  };
 
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-border bg-muted/50">
+      <div className="p-3 md:p-4 border-b border-border bg-muted/50">
         <h3 className="font-medium">System Visualization</h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs md:text-sm text-muted-foreground">
           Live view of your system as it emerges
         </p>
       </div>
 
       {/* Visualization content */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-3 md:p-6 overflow-y-auto">
         {conversationState.discovered_entities.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
@@ -34,19 +87,32 @@ const VisualizationCanvas = () => {
                 <Target className="w-4 h-4" />
                 Entities ({conversationState.discovered_entities.length})
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {conversationState.discovered_entities.map((entity) => (
                   <div
                     key={entity.id}
-                    className="p-3 rounded-md border border-border bg-card hover:shadow-sm transition-shadow"
-                  >
-                    <h5 className="font-medium">{entity.name}</h5>
-                    <p className="text-sm text-muted-foreground">{entity.type}</p>
-                    {entity.description && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {entity.description}
-                      </p>
+                    className={cn(
+                      "p-3 rounded-md border bg-card hover:shadow-sm transition-all duration-500",
+                      getEntityTypeColor(entity.type),
+                      newItems.has(`entity-${entity.id}`) 
+                        ? "animate-pulse ring-2 ring-primary/50 scale-105" 
+                        : "hover:scale-102"
                     )}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h5 className="font-medium">{entity.name}</h5>
+                        <p className="text-sm opacity-75 capitalize">{entity.type.replace('_', ' ')}</p>
+                        {entity.description && (
+                          <p className="text-xs opacity-60 mt-1">
+                            {entity.description}
+                          </p>
+                        )}
+                      </div>
+                      {newItems.has(`entity-${entity.id}`) && (
+                        <Sparkles className="w-4 h-4 text-primary animate-spin" />
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -63,10 +129,20 @@ const VisualizationCanvas = () => {
                   {conversationState.scenarios.map((scenario) => (
                     <div
                       key={scenario.id}
-                      className="p-3 rounded-md border border-border bg-card"
+                      className={cn(
+                        "p-3 rounded-md border bg-card transition-all duration-500",
+                        newItems.has(`scenario-${scenario.id}`)
+                          ? "animate-pulse ring-2 ring-primary/50 scale-105 bg-primary/5"
+                          : "hover:shadow-sm"
+                      )}
                     >
                       <div className="flex items-start justify-between mb-2">
-                        <h5 className="font-medium">{scenario.title}</h5>
+                        <h5 className="font-medium flex items-center gap-2">
+                          {scenario.title}
+                          {newItems.has(`scenario-${scenario.id}`) && (
+                            <Sparkles className="w-4 h-4 text-primary animate-spin" />
+                          )}
+                        </h5>
                         <span className={`text-xs px-2 py-1 rounded ${
                           scenario.status === 'complete' ? 'bg-green-100 text-green-800' :
                           scenario.status === 'validated' ? 'bg-blue-100 text-blue-800' :

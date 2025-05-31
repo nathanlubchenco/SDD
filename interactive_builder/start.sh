@@ -41,7 +41,14 @@ if [ ! -d "backend/venv" ]; then
     cd backend
     python -m venv venv
     source venv/bin/activate
+    pip install --upgrade pip
     pip install -r requirements.txt
+    cd ..
+else
+    echo "📦 Checking backend dependencies..."
+    cd backend
+    source venv/bin/activate
+    pip install -r requirements.txt --quiet
     cd ..
 fi
 

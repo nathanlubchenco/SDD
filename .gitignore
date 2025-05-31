@@ -1,5 +1,6 @@
 # Virtual environment
 .venv/
+interactive_builder/backend/venv
 
 # Python byte-compiled and cache files
 __pycache__/

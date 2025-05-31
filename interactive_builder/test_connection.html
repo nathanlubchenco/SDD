@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Connection Test</title>
+    <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>WebSocket Connection Test</h1>
+    <div id="status">Connecting...</div>
+    <div id="messages"></div>
+    
+    <script>
+        const statusDiv = document.getElementById('status');
+        const messagesDiv = document.getElementById('messages');
+        
+        function log(message) {
+            console.log(message);
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toISOString()}: ${message}`;
+            messagesDiv.appendChild(div);
+        }
+        
+        log('Attempting to connect to http://localhost:8000');
+        
+        const socket = io('http://localhost:8000', {
+            transports: ['websocket', 'polling'],
+            timeout: 10000,
+        });
+        
+        socket.on('connect', () => {
+            statusDiv.textContent = 'Connected ✅';
+            statusDiv.style.color = 'green';
+            log('✅ Connected to WebSocket server');
+        });
+        
+        socket.on('disconnect', (reason) => {
+            statusDiv.textContent = 'Disconnected ❌';
+            statusDiv.style.color = 'red';
+            log(`❌ Disconnected: ${reason}`);
+        });
+        
+        socket.on('connect_error', (error) => {
+            statusDiv.textContent = 'Connection Error ❌';
+            statusDiv.style.color = 'red';
+            log(`❌ Connection error: ${error.message}`);
+        });
+        
+        socket.on('message', (data) => {
+            log(`📨 Received message: ${data.content}`);
+        });
+        
+        // Test message sending after 2 seconds
+        setTimeout(() => {
+            if (socket.connected) {
+                log('🧪 Testing message send...');
+                socket.emit('message', { content: 'Test message from HTML client' });
+            } else {
+                log('⚠️ Cannot send test message - not connected');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

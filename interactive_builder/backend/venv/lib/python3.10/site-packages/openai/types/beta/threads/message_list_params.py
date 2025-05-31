@@ -1,4 +1,4 @@
-# File generated from our OpenAPI spec by Stainless.
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
 from __future__ import annotations
 
@@ -37,3 +37,6 @@ class MessageListParams(TypedDict, total=False):
 
     `asc` for ascending order and `desc` for descending order.
     """
+
+    run_id: str
+    """Filter messages by the run ID that generated them."""

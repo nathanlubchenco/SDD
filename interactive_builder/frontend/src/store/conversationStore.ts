@@ -149,7 +149,9 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   setConnected: (connected) => {
+    console.log(`🔄 Store: setConnected called with value: ${connected}`);
     set({ connected });
+    console.log(`🔄 Store: connected state is now: ${connected}`);
   },
 
   setActiveTab: (tab) => {

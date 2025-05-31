@@ -1,4 +1,4 @@
-# File generated from our OpenAPI spec by Stainless.
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
 from typing_extensions import override
 
@@ -16,12 +16,6 @@ class BetaProxy(LazyProxy[resources.Beta]):
     @override
     def __load__(self) -> resources.Beta:
         return _load_client().beta
-
-
-class EditsProxy(LazyProxy[resources.Edits]):
-    @override
-    def __load__(self) -> resources.Edits:
-        return _load_client().edits
 
 
 class FilesProxy(LazyProxy[resources.Files]):
@@ -48,16 +42,16 @@ class ModelsProxy(LazyProxy[resources.Models]):
         return _load_client().models
 
 
+class BatchesProxy(LazyProxy[resources.Batches]):
+    @override
+    def __load__(self) -> resources.Batches:
+        return _load_client().batches
+
+
 class EmbeddingsProxy(LazyProxy[resources.Embeddings]):
     @override
     def __load__(self) -> resources.Embeddings:
         return _load_client().embeddings
-
-
-class FineTunesProxy(LazyProxy[resources.FineTunes]):
-    @override
-    def __load__(self) -> resources.FineTunes:
-        return _load_client().fine_tunes
 
 
 class CompletionsProxy(LazyProxy[resources.Completions]):
@@ -80,13 +74,12 @@ class FineTuningProxy(LazyProxy[resources.FineTuning]):
 
 chat: resources.Chat = ChatProxy().__as_proxied__()
 beta: resources.Beta = BetaProxy().__as_proxied__()
-edits: resources.Edits = EditsProxy().__as_proxied__()
 files: resources.Files = FilesProxy().__as_proxied__()
 audio: resources.Audio = AudioProxy().__as_proxied__()
 images: resources.Images = ImagesProxy().__as_proxied__()
 models: resources.Models = ModelsProxy().__as_proxied__()
+batches: resources.Batches = BatchesProxy().__as_proxied__()
 embeddings: resources.Embeddings = EmbeddingsProxy().__as_proxied__()
-fine_tunes: resources.FineTunes = FineTunesProxy().__as_proxied__()
 completions: resources.Completions = CompletionsProxy().__as_proxied__()
 moderations: resources.Moderations = ModerationsProxy().__as_proxied__()
 fine_tuning: resources.FineTuning = FineTuningProxy().__as_proxied__()

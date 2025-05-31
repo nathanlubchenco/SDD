@@ -1,9 +1,10 @@
-# File generated from our OpenAPI spec by Stainless.
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
 from typing import List, Union, Optional
 from typing_extensions import Literal
 
 from ..._models import BaseModel
+from .fine_tuning_job_wandb_integration_object import FineTuningJobWandbIntegrationObject
 
 __all__ = ["FineTuningJob", "Error", "Hyperparameters"]
 
@@ -15,7 +16,7 @@ class Error(BaseModel):
     message: str
     """A human-readable error message."""
 
-    param: Optional[str]
+    param: Optional[str] = None
     """The parameter that was invalid, usually `training_file` or `validation_file`.
 
     This field will be null if the failure was not parameter-specific.
@@ -39,19 +40,19 @@ class FineTuningJob(BaseModel):
     created_at: int
     """The Unix timestamp (in seconds) for when the fine-tuning job was created."""
 
-    error: Optional[Error]
+    error: Optional[Error] = None
     """
     For fine-tuning jobs that have `failed`, this will contain more information on
     the cause of the failure.
     """
 
-    fine_tuned_model: Optional[str]
+    fine_tuned_model: Optional[str] = None
     """The name of the fine-tuned model that is being created.
 
     The value will be null if the fine-tuning job is still running.
     """
 
-    finished_at: Optional[int]
+    finished_at: Optional[int] = None
     """The Unix timestamp (in seconds) for when the fine-tuning job was finished.
 
     The value will be null if the fine-tuning job is still running.
@@ -80,13 +81,16 @@ class FineTuningJob(BaseModel):
     [Files API](https://platform.openai.com/docs/api-reference/files/retrieve-contents).
     """
 
+    seed: int
+    """The seed used for the fine-tuning job."""
+
     status: Literal["validating_files", "queued", "running", "succeeded", "failed", "cancelled"]
     """
     The current status of the fine-tuning job, which can be either
     `validating_files`, `queued`, `running`, `succeeded`, `failed`, or `cancelled`.
     """
 
-    trained_tokens: Optional[int]
+    trained_tokens: Optional[int] = None
     """The total number of billable tokens processed by this fine-tuning job.
 
     The value will be null if the fine-tuning job is still running.
@@ -99,9 +103,18 @@ class FineTuningJob(BaseModel):
     [Files API](https://platform.openai.com/docs/api-reference/files/retrieve-contents).
     """
 
-    validation_file: Optional[str]
+    validation_file: Optional[str] = None
     """The file ID used for validation.
 
     You can retrieve the validation results with the
     [Files API](https://platform.openai.com/docs/api-reference/files/retrieve-contents).
     """
+
+    estimated_finish: Optional[int] = None
+    """
+    The Unix timestamp (in seconds) for when the fine-tuning job is estimated to
+    finish. The value will be null if the fine-tuning job is not running.
+    """
+
+    integrations: Optional[List[FineTuningJobWandbIntegrationObject]] = None
+    """A list of integrations to enable for this fine-tuning job."""

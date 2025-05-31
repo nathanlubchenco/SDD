@@ -1,4 +1,4 @@
-# File generated from our OpenAPI spec by Stainless.
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
 from typing import Dict, List, Optional
 from typing_extensions import Literal
@@ -30,6 +30,6 @@ class CompletionChoice(BaseModel):
 
     index: int
 
-    logprobs: Optional[Logprobs]
+    logprobs: Optional[Logprobs] = None
 
     text: str

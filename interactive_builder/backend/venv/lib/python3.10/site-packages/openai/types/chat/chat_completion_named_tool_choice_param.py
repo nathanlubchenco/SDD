@@ -1,4 +1,4 @@
-# File generated from our OpenAPI spec by Stainless.
+# File generated from our OpenAPI spec by Stainless. See CONTRIBUTING.md for details.
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ class Function(TypedDict, total=False):
 
 
 class ChatCompletionNamedToolChoiceParam(TypedDict, total=False):
-    function: Function
+    function: Required[Function]
 
-    type: Literal["function"]
+    type: Required[Literal["function"]]
     """The type of the tool. Currently, only `function` is supported."""

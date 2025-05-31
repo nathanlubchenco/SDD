@@ -8,7 +8,8 @@ from models import (
     Entity, Scenario, Constraint, ConstraintCategory, ScenarioStatus,
     ExpertiseLevel, ConstraintPriority
 )
-from ai_client import AIClient
+from simple_ai_client_complete import SimpleAIClient as AIClient
+from nlp_extractor import NLPExtractor, ExtractedEntity, ExtractedScenario, ExtractedConstraint
 
 class ConversationEngine:
     """
@@ -20,6 +21,7 @@ class ConversationEngine:
         self.session_id = session_id
         self.state = ConversationState()
         self.ai_client = AIClient()
+        self.nlp_extractor = NLPExtractor()
         self.conversation_history: List[Dict[str, str]] = []
         
     async def process_message(self, user_message: str) -> Dict[str, Any]:
@@ -45,6 +47,14 @@ class ConversationEngine:
         
         # Extract and update state from the conversation
         await self._extract_and_update_state(user_message)
+        
+        # Generate contextual follow-up questions
+        response.suggested_actions = self.nlp_extractor.generate_followup_questions(
+            self.state.discovered_entities,
+            self.state.scenarios, 
+            self.state.constraints,
+            self.state.phase.value
+        )
         
         return {
             "message": response.message,
@@ -197,98 +207,87 @@ Total elements captured: {total_elements}
         return "\n".join(context_parts)
     
     async def _extract_and_update_state(self, user_message: str):
-        """Extract entities, scenarios, and constraints from the conversation"""
+        """Extract entities, scenarios, and constraints from the conversation using advanced NLP"""
         
-        # Extract entities
-        entities = await self._extract_entities(user_message)
-        for entity_data in entities:
-            if not any(e.name.lower() == entity_data['name'].lower() for e in self.state.discovered_entities):
-                entity = Entity(**entity_data)
+        print(f"🔍 Extracting from: {user_message[:100]}...")
+        
+        # Extract entities using NLP
+        extracted_entities = self.nlp_extractor.extract_entities(user_message)
+        for ext_entity in extracted_entities:
+            # Check if entity already exists
+            if not any(e.name.lower() == ext_entity.name.lower() for e in self.state.discovered_entities):
+                entity = Entity(
+                    name=ext_entity.name,
+                    type=ext_entity.type,
+                    description=ext_entity.description
+                )
                 self.state.discovered_entities.append(entity)
+                print(f"✅ New entity: {ext_entity.name} ({ext_entity.type})")
         
-        # Extract scenarios
-        scenarios = await self._extract_scenarios(user_message)
-        for scenario_data in scenarios:
-            scenario = Scenario(**scenario_data)
+        # Extract scenarios using NLP
+        extracted_scenarios = self.nlp_extractor.extract_scenarios(user_message)
+        for ext_scenario in extracted_scenarios:
+            scenario = Scenario(
+                title=ext_scenario.title,
+                given=ext_scenario.given,
+                when=ext_scenario.when,
+                then=ext_scenario.then,
+                status=ScenarioStatus.DRAFT,
+                entities=ext_scenario.entities
+            )
             self.state.scenarios.append(scenario)
+            print(f"✅ New scenario: {ext_scenario.title}")
         
-        # Extract constraints
-        constraints = await self._extract_constraints(user_message)
-        for constraint_data in constraints:
-            constraint = Constraint(**constraint_data)
+        # Extract constraints using NLP
+        extracted_constraints = self.nlp_extractor.extract_constraints(user_message)
+        for ext_constraint in extracted_constraints:
+            # Map string category to enum
+            category_map = {
+                'performance': ConstraintCategory.PERFORMANCE,
+                'security': ConstraintCategory.SECURITY,
+                'reliability': ConstraintCategory.RELIABILITY,
+                'scalability': ConstraintCategory.SCALABILITY
+            }
+            
+            # Map string priority to enum
+            priority_map = {
+                'low': ConstraintPriority.LOW,
+                'medium': ConstraintPriority.MEDIUM,
+                'high': ConstraintPriority.HIGH
+            }
+            
+            constraint = Constraint(
+                category=category_map.get(ext_constraint.category, ConstraintCategory.PERFORMANCE),
+                name=ext_constraint.name,
+                requirement=ext_constraint.requirement,
+                priority=priority_map.get(ext_constraint.priority, ConstraintPriority.MEDIUM)
+            )
             self.state.constraints.append(constraint)
+            print(f"✅ New constraint: {ext_constraint.name} ({ext_constraint.category})")
         
         # Update progress score
         self._update_progress_score()
         
-        # Check for phase transitions
-        new_phase = self._check_phase_transition()
-        if new_phase:
-            self.state.phase = new_phase
-    
-    async def _extract_entities(self, message: str) -> List[Dict[str, Any]]:
-        """Extract entity information from user message"""
-        entities = []
+        # Check for phase transitions using NLP analysis
+        new_phase_str = self.nlp_extractor.analyze_conversation_phase(
+            user_message,
+            len(self.state.discovered_entities),
+            len(self.state.scenarios),
+            len(self.state.constraints)
+        )
         
-        # Simple patterns for entity extraction (in production, use more sophisticated NLP)
-        patterns = [
-            r'\b(user|customer|admin|manager|system)\b',
-            r'\b(task|order|product|invoice|report|message)\b',
-            r'\b(database|server|api|service|application)\b'
-        ]
-        
-        for pattern in patterns:
-            matches = re.findall(pattern, message.lower())
-            for match in matches:
-                entities.append({
-                    'name': match.title(),
-                    'type': 'entity',
-                    'description': f'Mentioned in: "{message[:50]}..."'
-                })
-        
-        return entities
-    
-    async def _extract_scenarios(self, message: str) -> List[Dict[str, Any]]:
-        """Extract scenario information from user message"""
-        scenarios = []
-        
-        # Look for Given/When/Then patterns or scenario descriptions
-        if any(word in message.lower() for word in ['when', 'if', 'scenario', 'should', 'then']):
-            # This is a simplified extraction - in production, use more sophisticated NLP
-            scenario = {
-                'title': f'Scenario from conversation',
-                'given': 'System is ready',
-                'when': message,
-                'then': 'Expected behavior occurs',
-                'status': ScenarioStatus.DRAFT.value
-            }
-            scenarios.append(scenario)
-        
-        return scenarios
-    
-    async def _extract_constraints(self, message: str) -> List[Dict[str, Any]]:
-        """Extract constraint information from user message"""
-        constraints = []
-        
-        # Look for performance, security, or quality-related mentions
-        constraint_indicators = {
-            'performance': ['fast', 'quick', 'slow', 'speed', 'latency', 'response time'],
-            'security': ['secure', 'safe', 'protect', 'encrypt', 'authenticate'],
-            'scalability': ['scale', 'users', 'concurrent', 'load', 'capacity'],
-            'reliability': ['reliable', 'uptime', 'available', 'stable', 'robust']
+        # Map string phase to enum
+        phase_map = {
+            'discovery': ConversationPhase.DISCOVERY,
+            'scenario_building': ConversationPhase.SCENARIO_BUILDING,
+            'constraint_definition': ConversationPhase.CONSTRAINT_DEFINITION,
+            'review': ConversationPhase.REVIEW
         }
         
-        for category, keywords in constraint_indicators.items():
-            if any(keyword in message.lower() for keyword in keywords):
-                constraint = {
-                    'category': category,
-                    'name': f'{category.title()} requirement',
-                    'requirement': f'Derived from: "{message[:100]}..."',
-                    'priority': ConstraintPriority.MEDIUM.value
-                }
-                constraints.append(constraint)
-        
-        return constraints
+        new_phase = phase_map.get(new_phase_str)
+        if new_phase and new_phase != self.state.phase:
+            print(f"🔄 Phase transition: {self.state.phase.value} → {new_phase.value}")
+            self.state.phase = new_phase
     
     def _update_progress_score(self):
         """Calculate and update progress score based on current state"""

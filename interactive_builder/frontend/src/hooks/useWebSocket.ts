@@ -1,27 +1,63 @@
 import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import { useConversationStore } from '@/store/conversationStore';
+import { socketManager } from '@/lib/socketManager';
 
 export const useWebSocket = () => {
   const socketRef = useRef<Socket | null>(null);
-  const { addMessage, updateConversationState, setConnected } = useConversationStore();
+  const { addMessage, updateConversationState, setConnected, connected } = useConversationStore();
+  const listenersSetupRef = useRef(false);
 
   useEffect(() => {
-    // Connect to WebSocket
-    socketRef.current = io('ws://localhost:8000', {
-      transports: ['websocket'],
-    });
+    // Get the singleton socket
+    const socket = socketManager.connect();
+    socketRef.current = socket;
+    
+    // Check initial connection state
+    console.log(`🔌 Initial socket connection state: ${socket?.connected}`);
+    if (socket?.connected) {
+      console.log('🔄 Socket already connected, setting state to TRUE');
+      setConnected(true);
+    }
 
-    const socket = socketRef.current;
+    // Always clean up and re-setup listeners to ensure proper state sync
+    // Remove any existing listeners to prevent duplicates
+    socket.off('connect');
+    socket.off('disconnect');
+    socket.off('connect_error');
+    socket.off('reconnect');
+    socket.off('reconnect_error');
+    socket.off('message');
+    socket.off('typing_start');
+    socket.off('typing_end');
+    socket.off('conversation_state_update');
+    socket.off('suggested_actions');
+    socket.off('error');
 
     socket.on('connect', () => {
-      console.log('Connected to WebSocket');
+      console.log('✅ Connected to WebSocket server');
+      console.log('🔄 Setting connected state to TRUE');
       setConnected(true);
     });
 
-    socket.on('disconnect', () => {
-      console.log('Disconnected from WebSocket');
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Disconnected from WebSocket:', reason);
+      console.log('🔄 Setting connected state to FALSE');
       setConnected(false);
+    });
+
+    socket.on('connect_error', (error) => {
+      console.error('🔥 WebSocket connection error:', error);
+      setConnected(false);
+    });
+
+    socket.on('reconnect', (attemptNumber) => {
+      console.log(`🔄 Reconnected after ${attemptNumber} attempts`);
+      setConnected(true);
+    });
+
+    socket.on('reconnect_error', (error) => {
+      console.error('🔄 Reconnection failed:', error);
     });
 
     socket.on('message', (data) => {
@@ -41,30 +77,74 @@ export const useWebSocket = () => {
     });
 
     socket.on('typing_end', (data) => {
-      // Update the typing message with actual content
-      addMessage({
-        content: data.content,
-        role: 'assistant',
-        typing: false,
-      });
+      // Remove any existing typing messages first
+      const { messages, updateMessage } = useConversationStore.getState();
+      const typingMessage = messages.find(m => m.role === 'assistant' && m.typing);
+      
+      if (typingMessage) {
+        updateMessage(typingMessage.id, {
+          content: data.content,
+          typing: false,
+        });
+      } else {
+        // Fallback: add new message if no typing message found
+        addMessage({
+          content: data.content,
+          role: 'assistant',
+          typing: false,
+        });
+      }
     });
 
     socket.on('conversation_state_update', (state) => {
       updateConversationState(state);
     });
 
+    socket.on('suggested_actions', (actions) => {
+      console.log('🎯 Suggested actions received:', actions);
+      // Could store these in state for UI display
+    });
+
     socket.on('error', (error) => {
       console.error('WebSocket error:', error);
     });
 
+    // Set up a periodic sync to ensure state stays in sync
+    const syncInterval = setInterval(() => {
+      const actualState = socket?.connected || false;
+      const storeState = useConversationStore.getState().connected;
+      if (actualState !== storeState) {
+        console.log(`🔄 Syncing connection state: actual=${actualState}, store=${storeState}`);
+        setConnected(actualState);
+      }
+    }, 1000);
+
     return () => {
-      socket.disconnect();
+      // Clean up interval
+      clearInterval(syncInterval);
+      
+      // Clean up listeners but don't disconnect the singleton
+      if (socket) {
+        socket.off('connect');
+        socket.off('disconnect');
+        socket.off('connect_error');
+        socket.off('reconnect');
+        socket.off('reconnect_error');
+        socket.off('message');
+        socket.off('typing_start');
+        socket.off('typing_end');
+        socket.off('conversation_state_update');
+        socket.off('suggested_actions');
+        socket.off('error');
+      }
+      socketRef.current = null;
     };
-  }, [addMessage, updateConversationState, setConnected]);
+  }, []); // Empty deps - only run once
 
   const sendMessage = (content: string) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('message', { content });
+    const socket = socketManager.getSocket();
+    if (socket?.connected) {
+      socket.emit('message', { content });
       addMessage({
         content,
         role: 'user',
@@ -73,14 +153,15 @@ export const useWebSocket = () => {
   };
 
   const sendTyping = (isTyping: boolean) => {
-    if (socketRef.current?.connected) {
-      socketRef.current.emit(isTyping ? 'typing_start' : 'typing_end');
+    const socket = socketManager.getSocket();
+    if (socket?.connected) {
+      socket.emit(isTyping ? 'typing_start' : 'typing_end');
     }
   };
 
   return {
     sendMessage,
     sendTyping,
-    connected: useConversationStore((state) => state.connected),
+    connected,
   };
 };

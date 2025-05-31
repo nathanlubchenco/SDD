@@ -17,10 +17,20 @@ from models import ConversationState, Message, Entity, Scenario, Constraint
 # Initialize FastAPI app
 app = FastAPI(title="SDD Interactive Builder Backend", version="1.0.0")
 
-# Add CORS middleware
+# Get port configuration
+PORT = int(os.getenv("PORT", 8000))
+FRONTEND_PORT = int(os.getenv("FRONTEND_PORT", 3000))
+
+# Add CORS middleware - Allow both standard and alternative frontend ports
+allowed_origins = [
+    f"http://localhost:{FRONTEND_PORT}",  # Standard port (3000)
+    "http://localhost:3001",             # Alternative port
+    "http://localhost:3000",             # Fallback
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -29,7 +39,7 @@ app.add_middleware(
 # Initialize Socket.IO
 sio = socketio.AsyncServer(
     async_mode="asgi",
-    cors_allowed_origins=["http://localhost:3000"],
+    cors_allowed_origins=allowed_origins,
     logger=True
 )
 
@@ -68,27 +78,38 @@ async def reset_conversation(session_id: str):
 
 # Socket.IO event handlers
 @sio.event
-async def connect(sid, environ):
+async def connect(sid, environ, auth):
     """Handle client connection"""
-    print(f"Client {sid} connected")
+    print(f"Client {sid} connected - Current sessions: {list(conversation_sessions.keys())}")
     
-    # Initialize conversation engine for this session
-    if sid not in conversation_sessions:
-        conversation_sessions[sid] = ConversationEngine(sid)
-    
-    # Send welcome message
-    await sio.emit('message', {
-        'content': "Hi! I'm here to help you build a specification for your system. What would you like to create today?",
-        'timestamp': datetime.now().isoformat()
-    }, room=sid)
+    try:
+        # Initialize conversation engine for this session
+        if sid not in conversation_sessions:
+            print(f"Creating new session for {sid}")
+            conversation_sessions[sid] = ConversationEngine(sid)
+            
+            # Send welcome message only for new sessions
+            await sio.emit('message', {
+                'content': "Hi! I'm here to help you build a specification for your system. What would you like to create today?",
+                'timestamp': datetime.now().isoformat()
+            }, room=sid)
+        else:
+            print(f"Session {sid} already exists, skipping welcome message")
+        
+    except Exception as e:
+        print(f"Error during connection setup: {e}")
+        await sio.emit('error', {
+            'message': 'Failed to initialize conversation engine. Please check server configuration.'
+        }, room=sid)
 
 @sio.event
 async def disconnect(sid):
     """Handle client disconnection"""
     print(f"Client {sid} disconnected")
-    # Optionally clean up session data
-    # if sid in conversation_sessions:
-    #     del conversation_sessions[sid]
+    # Clean up session data to prevent memory leaks and duplicate sessions
+    if sid in conversation_sessions:
+        del conversation_sessions[sid]
+        print(f"Cleaned up session for {sid}")
 
 @sio.event
 async def message(sid, data):
@@ -121,6 +142,10 @@ async def message(sid, data):
         # Send updated conversation state
         if response.get('state_updated'):
             await sio.emit('conversation_state_update', engine.get_state(), room=sid)
+        
+        # Send suggested actions if available
+        if response.get('suggested_actions'):
+            await sio.emit('suggested_actions', response['suggested_actions'], room=sid)
             
     except Exception as e:
         print(f"Error processing message: {e}")
@@ -142,13 +167,13 @@ async def typing_end(sid):
 
 if __name__ == "__main__":
     print("🚀 Starting SDD Interactive Builder Backend...")
-    print("📡 WebSocket endpoint: ws://localhost:8000")
-    print("🌐 API docs: http://localhost:8000/docs")
+    print(f"📡 WebSocket endpoint: ws://localhost:{PORT}")
+    print(f"🌐 API docs: http://localhost:{PORT}/docs")
     
     uvicorn.run(
         "main:socket_app",
         host="0.0.0.0",
-        port=8000,
+        port=PORT,
         reload=True,
         log_level="info"
     )

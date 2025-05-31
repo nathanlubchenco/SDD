@@ -39,15 +39,15 @@ ${conversationState.constraints.map(constraint => `  ${constraint.category}:
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="p-4 border-b border-border bg-muted/50">
+      <div className="p-3 md:p-4 border-b border-border bg-muted/50">
         <h3 className="font-medium">Preview & Actions</h3>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs md:text-sm text-muted-foreground">
           Specification preview and controls
         </p>
       </div>
 
       {/* Progress indicator */}
-      <div className="p-4 border-b border-border">
+      <div className="p-3 md:p-4 border-b border-border">
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-medium">Progress</span>
           <span className="text-sm text-muted-foreground">
@@ -70,7 +70,7 @@ ${conversationState.constraints.map(constraint => `  ${constraint.category}:
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {conversationState.scenarios.length === 0 ? (
-          <div className="p-4 text-center">
+          <div className="p-3 md:p-4 text-center">
             <FileText className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="font-medium mb-2">No content yet</h3>
             <p className="text-sm text-muted-foreground">
@@ -78,9 +78,9 @@ ${conversationState.constraints.map(constraint => `  ${constraint.category}:
             </p>
           </div>
         ) : (
-          <div className="p-4 space-y-4">
+          <div className="p-3 md:p-4 space-y-4">
             {/* Quick stats */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2 md:gap-3">
               <div className="p-3 rounded-md bg-muted">
                 <div className="text-lg font-semibold">
                   {conversationState.scenarios.length}

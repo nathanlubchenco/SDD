@@ -30,17 +30,11 @@ from ._types import (
     AnyMapping,
     HttpxRequestFiles,
 )
-from ._utils import (
-    is_list,
-    is_given,
-    is_mapping,
-    parse_date,
-    parse_datetime,
-    strip_not_given,
-)
-from ._compat import PYDANTIC_V2, ConfigDict
-from ._compat import GenericModel as BaseGenericModel
+from ._utils import is_list, is_given, is_mapping, parse_date, parse_datetime, strip_not_given
 from ._compat import (
+    PYDANTIC_V2,
+    ConfigDict,
+    GenericModel as BaseGenericModel,
     get_args,
     is_union,
     parse_obj,
@@ -289,7 +283,7 @@ def construct_type(*, value: object, type_: type) -> object:
 
     if is_union(origin):
         try:
-            return validate_type(type_=type_, value=value)
+            return validate_type(type_=cast("type[object]", type_), value=value)
         except Exception:
             pass
 
@@ -382,7 +376,7 @@ elif not TYPE_CHECKING:  # TODO: condition is weird
 
         For example:
         ```py
-        validated = RootModel[int](__root__='5').__root__
+        validated = RootModel[int](__root__="5").__root__
         # validated: 5
         ```
         """
