@@ -1,0 +1,23 @@
+{
+  "name": "sdd-interactive-builder",
+  "version": "1.0.0",
+  "description": "Interactive Specification Builder for SDD",
+  "scripts": {
+    "test": "node tests/websocket_connection.test.js",
+    "test:watch": "nodemon tests/websocket_connection.test.js",
+    "start": "./start.sh",
+    "setup": "./setup.sh",
+    "debug": "./debug.sh",
+    "cleanup": "./cleanup.sh"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7",
+    "socket.io-client": "^4.5.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.20"
+  },
+  "keywords": ["sdd", "specification", "websocket", "interactive"],
+  "author": "SDD Team",
+  "license": "MIT"
+}

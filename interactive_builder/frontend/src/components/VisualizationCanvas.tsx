@@ -57,6 +57,40 @@ const VisualizationCanvas = () => {
     return colors[type] || colors.entity;
   };
 
+  const getEntityTypeIcon = (type: string) => {
+    const icons = {
+      actor: '👤',
+      data_entity: '📊', 
+      system_component: '⚙️',
+      business_concept: '🏢',
+      action_concept: '⚡',
+      entity: '📦',
+    };
+    return icons[type] || icons.entity;
+  };
+
+  const parseEntityDescription = (description?: string) => {
+    if (!description) return { main: '', relationships: [], synonyms: [], role: '' };
+    
+    const parts = description.split(' | ');
+    const main = parts[0] || '';
+    let relationships: string[] = [];
+    let synonyms: string[] = [];
+    let role = '';
+    
+    parts.forEach(part => {
+      if (part.startsWith('Relationships:')) {
+        relationships = part.replace('Relationships: ', '').split(', ');
+      } else if (part.startsWith('Also known as:')) {
+        synonyms = part.replace('Also known as: ', '').split(', ');
+      } else if (part.startsWith('Role:')) {
+        role = part.replace('Role: ', '');
+      }
+    });
+    
+    return { main, relationships, synonyms, role };
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
@@ -101,13 +135,44 @@ const VisualizationCanvas = () => {
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h5 className="font-medium">{entity.name}</h5>
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getEntityTypeIcon(entity.type)}</span>
+                          <h5 className="font-medium">{entity.name}</h5>
+                        </div>
                         <p className="text-sm opacity-75 capitalize">{entity.type.replace('_', ' ')}</p>
-                        {entity.description && (
-                          <p className="text-xs opacity-60 mt-1">
-                            {entity.description}
-                          </p>
-                        )}
+                        
+                        {entity.description && (() => {
+                          const parsed = parseEntityDescription(entity.description);
+                          return (
+                            <div className="mt-2 space-y-1">
+                              {parsed.main && (
+                                <p className="text-xs opacity-60">{parsed.main}</p>
+                              )}
+                              {parsed.role && (
+                                <p className="text-xs opacity-50">
+                                  <span className="font-medium">Role:</span> {parsed.role}
+                                </p>
+                              )}
+                              {parsed.synonyms.length > 0 && (
+                                <p className="text-xs opacity-50">
+                                  <span className="font-medium">Synonyms:</span> {parsed.synonyms.slice(0, 2).join(', ')}
+                                </p>
+                              )}
+                              {parsed.relationships.length > 0 && (
+                                <div className="text-xs opacity-50">
+                                  <span className="font-medium">Relationships:</span>
+                                  <div className="flex flex-wrap gap-1 mt-1">
+                                    {parsed.relationships.slice(0, 3).map((rel, i) => (
+                                      <span key={i} className="bg-black/10 px-1 py-0.5 rounded text-xs">
+                                        {rel}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                       {newItems.has(`entity-${entity.id}`) && (
                         <Sparkles className="w-4 h-4 text-primary animate-spin" />

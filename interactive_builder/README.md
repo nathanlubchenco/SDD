@@ -151,6 +151,32 @@ The system tracks progress through:
 - **Code Generation**: Direct integration with SDD CLI
 - **Templates**: Pre-built specification patterns
 
+## 🧪 Testing
+
+Run tests to verify functionality:
+
+```bash
+# Run WebSocket regression tests
+npm test
+
+# Run tests in watch mode during development
+npm run test:watch
+
+# Manual testing with debug script
+./debug.sh
+```
+
+### WebSocket Regression Prevention
+
+The project includes comprehensive WebSocket connection regression tests that verify:
+- ✅ Backend health and startup
+- ✅ Socket.IO handshake functionality  
+- ✅ CORS configuration for multiple frontend ports
+- ✅ Real-time message exchange
+- ✅ Connection state management
+
+These tests run automatically on CI/CD and can be run locally to prevent connection issues.
+
 ## 🐛 Troubleshooting
 
 ### Backend Issues
@@ -165,8 +191,9 @@ The system tracks progress through:
 
 ### WebSocket Connection Issues
 - Ensure backend is running on port 8000
-- Check CORS configuration
-- Verify no firewall blocking connections
+- Check CORS configuration for ports 3000/3001
+- Run regression tests: `npm test`
+- Use debug script: `./debug.sh`
 
 ## 🎨 Customization
 

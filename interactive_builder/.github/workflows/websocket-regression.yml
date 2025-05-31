@@ -1,0 +1,56 @@
+name: WebSocket Connection Regression Test
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'interactive_builder/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'interactive_builder/**'
+
+jobs:
+  websocket-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+    
+    - name: Install Python dependencies
+      run: |
+        cd interactive_builder/backend
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Install Node.js dependencies
+      run: |
+        cd interactive_builder
+        npm install
+    
+    - name: Set up test environment
+      run: |
+        export OPENAI_API_KEY="test-key-for-regression"
+        export AI_PROVIDER="openai"
+    
+    - name: Run WebSocket regression tests
+      run: |
+        cd interactive_builder
+        npm test
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: websocket-test-results
+        path: interactive_builder/test-results.log

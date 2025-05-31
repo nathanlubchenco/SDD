@@ -10,6 +10,7 @@ from models import (
 )
 from simple_ai_client_complete import SimpleAIClient as AIClient
 from nlp_extractor import NLPExtractor, ExtractedEntity, ExtractedScenario, ExtractedConstraint
+from enhanced_nlp_extractor import EnhancedNLPExtractor, EnhancedEntity
 
 class ConversationEngine:
     """
@@ -22,7 +23,9 @@ class ConversationEngine:
         self.state = ConversationState()
         self.ai_client = AIClient()
         self.nlp_extractor = NLPExtractor()
+        self.enhanced_extractor = EnhancedNLPExtractor()
         self.conversation_history: List[Dict[str, str]] = []
+        self.detected_domain = None
         
     async def process_message(self, user_message: str) -> Dict[str, Any]:
         """
@@ -207,22 +210,78 @@ Total elements captured: {total_elements}
         return "\n".join(context_parts)
     
     async def _extract_and_update_state(self, user_message: str):
-        """Extract entities, scenarios, and constraints from the conversation using advanced NLP"""
+        """Extract entities, scenarios, and constraints from the conversation using enhanced NLP"""
         
-        print(f"🔍 Extracting from: {user_message[:100]}...")
+        print(f"🔍 Enhanced extraction from: {user_message[:100]}...")
         
-        # Extract entities using NLP
-        extracted_entities = self.nlp_extractor.extract_entities(user_message)
-        for ext_entity in extracted_entities:
-            # Check if entity already exists
-            if not any(e.name.lower() == ext_entity.name.lower() for e in self.state.discovered_entities):
-                entity = Entity(
-                    name=ext_entity.name,
-                    type=ext_entity.type,
-                    description=ext_entity.description
-                )
-                self.state.discovered_entities.append(entity)
-                print(f"✅ New entity: {ext_entity.name} ({ext_entity.type})")
+        # Detect domain if not already detected
+        if not self.detected_domain:
+            self.detected_domain = self.enhanced_extractor.detect_domain(user_message)
+            if self.detected_domain:
+                print(f"🎯 Detected domain: {self.detected_domain}")
+        
+        # Build conversation context for better extraction
+        full_context = " ".join([msg["content"] for msg in self.conversation_history[-3:]])
+        
+        # Extract entities using enhanced NLP
+        try:
+            enhanced_entities = self.enhanced_extractor.extract_entities_enhanced(
+                text=user_message,
+                context=full_context,
+                domain_hint=self.detected_domain
+            )
+            
+            # Convert enhanced entities to our format and add to state
+            for enh_entity in enhanced_entities:
+                # Check if entity already exists (by canonical name)
+                existing_entity = None
+                for e in self.state.discovered_entities:
+                    if (e.name.lower() == enh_entity.canonical_name.lower() or 
+                        e.name.lower() == enh_entity.name.lower()):
+                        existing_entity = e
+                        break
+                
+                if not existing_entity:
+                    # Create rich description with enhanced information
+                    description_parts = [enh_entity.description]
+                    
+                    if enh_entity.relationships:
+                        description_parts.append(f"Relationships: {', '.join(enh_entity.relationships[:3])}")
+                    
+                    if enh_entity.synonyms:
+                        description_parts.append(f"Also known as: {', '.join(list(enh_entity.synonyms)[:3])}")
+                    
+                    if enh_entity.context.syntactic_role != 'unknown':
+                        description_parts.append(f"Role: {enh_entity.context.syntactic_role}")
+                    
+                    entity = Entity(
+                        name=enh_entity.name,
+                        type=enh_entity.type,
+                        description=" | ".join(description_parts)
+                    )
+                    self.state.discovered_entities.append(entity)
+                    print(f"✅ Enhanced entity: {enh_entity.name} ({enh_entity.type}, conf: {enh_entity.confidence:.2f})")
+                    
+                    # Log additional context for debugging
+                    if enh_entity.relationships:
+                        print(f"   🔗 Relationships: {enh_entity.relationships[:2]}")
+                    if enh_entity.context.semantic_class != 'unknown':
+                        print(f"   🏷️  Semantic class: {enh_entity.context.semantic_class}")
+                        
+        except Exception as e:
+            print(f"⚠️ Enhanced extraction failed, falling back to basic: {e}")
+            # Fallback to basic extraction
+            extracted_entities = self.nlp_extractor.extract_entities(user_message)
+            for ext_entity in extracted_entities:
+                # Check if entity already exists
+                if not any(e.name.lower() == ext_entity.name.lower() for e in self.state.discovered_entities):
+                    entity = Entity(
+                        name=ext_entity.name,
+                        type=ext_entity.type,
+                        description=ext_entity.description
+                    )
+                    self.state.discovered_entities.append(entity)
+                    print(f"✅ Fallback entity: {ext_entity.name} ({ext_entity.type})")
         
         # Extract scenarios using NLP
         extracted_scenarios = self.nlp_extractor.extract_scenarios(user_message)
