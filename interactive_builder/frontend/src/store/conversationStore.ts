@@ -39,8 +39,8 @@ interface ConversationStore {
   setConnected: (connected: boolean) => void;
   
   // UI state
-  activeTab: 'chat' | 'visualization' | 'preview';
-  setActiveTab: (tab: 'chat' | 'visualization' | 'preview') => void;
+  activeTab: 'chat' | 'visualization' | 'preview' | 'scenarios';
+  setActiveTab: (tab: 'chat' | 'visualization' | 'preview' | 'scenarios') => void;
   
   // Reset functions
   reset: () => void;
@@ -83,9 +83,27 @@ export const useConversationStore = create<ConversationStore>((set, get) => ({
   },
 
   updateConversationState: (updates) => {
-    set((state) => ({
-      conversationState: { ...state.conversationState, ...updates },
-    }));
+    set((state) => {
+      const newState = { ...state.conversationState, ...updates };
+      
+      // Sync with specification store if it's available
+      if (typeof window !== 'undefined') {
+        import('./specificationStore').then(({ useSpecificationStore }) => {
+          const specStore = useSpecificationStore.getState();
+          specStore.syncFromConversationState(
+            newState.discovered_entities,
+            newState.scenarios,
+            newState.constraints
+          );
+        }).catch(() => {
+          // Specification store not available, ignore
+        });
+      }
+      
+      return {
+        conversationState: newState,
+      };
+    });
   },
 
   addEntity: (entity) => {

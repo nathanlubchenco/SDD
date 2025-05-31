@@ -3,13 +3,18 @@ import { useConversationStore } from '@/store/conversationStore';
 import ChatInterface from '@/components/ChatInterface';
 import VisualizationCanvas from '@/components/VisualizationCanvas';
 import PreviewPanel from '@/components/PreviewPanel';
+import { ScenarioBuilder } from '@/components/ScenarioBuilder';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { socketManager } from '@/lib/socketManager';
 import { cn } from '@/lib/utils';
 
 function App() {
-  const { activeTab, setActiveTab, connected } = useConversationStore();
+  const { activeTab, setActiveTab, connected, conversationState } = useConversationStore();
   useWebSocket(); // Initialize WebSocket connection
+  
+  // Show scenarios tab when in scenario building phase or when scenarios exist
+  const showScenariosTab = conversationState.phase === 'scenario_building' || 
+                          conversationState.scenarios.length > 0;
 
   // Cleanup on app unmount
   useEffect(() => {
@@ -40,7 +45,7 @@ function App() {
           
           {/* Desktop tabs - only show on larger screens where we have multiple panels */}
           <nav className="hidden lg:flex items-center gap-1">
-            {(['chat', 'visualization', 'preview'] as const).map((tab) => (
+            {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios'] : [])] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -89,7 +94,9 @@ function App() {
             <ChatInterface />
           </div>
           <div className="w-2/5 min-w-0">
-            {activeTab === 'visualization' ? <VisualizationCanvas /> : <PreviewPanel />}
+            {activeTab === 'visualization' && <VisualizationCanvas />}
+            {activeTab === 'scenarios' && <ScenarioBuilder isVisible={true} />}
+            {(activeTab === 'preview' || (!['visualization', 'scenarios'].includes(activeTab))) && <PreviewPanel />}
           </div>
         </div>
 
@@ -99,7 +106,9 @@ function App() {
             <ChatInterface />
           </div>
           <div className="w-2/5 min-w-0">
-            {activeTab === 'visualization' ? <VisualizationCanvas /> : <PreviewPanel />}
+            {activeTab === 'visualization' && <VisualizationCanvas />}
+            {activeTab === 'scenarios' && <ScenarioBuilder isVisible={true} />}
+            {(activeTab === 'preview' || (!['visualization', 'scenarios'].includes(activeTab))) && <PreviewPanel />}
           </div>
         </div>
 
@@ -108,7 +117,7 @@ function App() {
           {/* Mobile tabs */}
           <div className="border-b border-border bg-background">
             <nav className="flex overflow-x-auto">
-              {(['chat', 'visualization', 'preview'] as const).map((tab) => (
+              {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios'] : [])] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -129,6 +138,7 @@ function App() {
           <div className="flex-1 min-w-0 overflow-hidden">
             {activeTab === 'chat' && <ChatInterface />}
             {activeTab === 'visualization' && <VisualizationCanvas />}
+            {activeTab === 'scenarios' && <ScenarioBuilder isVisible={true} />}
             {activeTab === 'preview' && <PreviewPanel />}
           </div>
         </div>

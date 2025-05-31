@@ -12,6 +12,7 @@ from simple_ai_client_complete import SimpleAIClient as AIClient
 from nlp_extractor import NLPExtractor, ExtractedEntity, ExtractedScenario, ExtractedConstraint
 from enhanced_nlp_extractor import EnhancedNLPExtractor, EnhancedEntity
 from contextual_followup_engine import ContextualFollowupEngine, FollowUpQuestion
+from scenario_builder import ScenarioBuilder
 
 class ConversationEngine:
     """
@@ -26,6 +27,7 @@ class ConversationEngine:
         self.nlp_extractor = NLPExtractor()
         self.enhanced_extractor = EnhancedNLPExtractor()
         self.followup_engine = ContextualFollowupEngine()
+        self.scenario_builder = ScenarioBuilder()
         self.conversation_history: List[Dict[str, str]] = []
         self.detected_domain = None
         
@@ -309,19 +311,53 @@ Total elements captured: {total_elements}
                     self.state.discovered_entities.append(entity)
                     print(f"✅ Fallback entity: {ext_entity.name} ({ext_entity.type})")
         
-        # Extract scenarios using NLP
-        extracted_scenarios = self.nlp_extractor.extract_scenarios(user_message)
-        for ext_scenario in extracted_scenarios:
-            scenario = Scenario(
-                title=ext_scenario.title,
-                given=ext_scenario.given,
-                when=ext_scenario.when,
-                then=ext_scenario.then,
-                status=ScenarioStatus.DRAFT,
-                entities=ext_scenario.entities
+        # Extract scenarios using enhanced real-time scenario builder
+        try:
+            entity_names = [e.name for e in self.state.discovered_entities]
+            built_scenarios = self.scenario_builder.extract_scenarios_from_text(
+                user_message, 
+                entities=entity_names
             )
-            self.state.scenarios.append(scenario)
-            print(f"✅ New scenario: {ext_scenario.title}")
+            
+            for built_scenario in built_scenarios:
+                # Convert scenario builder format to our models format
+                scenario = Scenario(
+                    title=built_scenario.title,
+                    given=" | ".join([comp.content for comp in built_scenario.given]),
+                    when=" | ".join([comp.content for comp in built_scenario.when]),
+                    then=" | ".join([comp.content for comp in built_scenario.then]),
+                    status=ScenarioStatus.DRAFT,
+                    entities=list(set([ent for comp in built_scenario.given + built_scenario.when + built_scenario.then 
+                                     for ent in comp.entities]))
+                )
+                self.state.scenarios.append(scenario)
+                print(f"✅ Enhanced scenario: {built_scenario.title} (conf: {built_scenario.confidence:.2f})")
+                
+                # Log completion suggestions for debugging
+                if built_scenario.completion_suggestions:
+                    print(f"   💡 Suggestions: {len(built_scenario.completion_suggestions)} available")
+                    for suggestion in built_scenario.completion_suggestions[:2]:
+                        print(f"      - {suggestion.component_type}: {suggestion.suggestion[:50]}...")
+                        
+                # Log validation issues
+                if built_scenario.validation_issues:
+                    print(f"   ⚠️  Issues: {built_scenario.validation_issues}")
+                        
+        except Exception as e:
+            print(f"⚠️ Enhanced scenario building failed, falling back to basic: {e}")
+            # Fallback to basic extraction
+            extracted_scenarios = self.nlp_extractor.extract_scenarios(user_message)
+            for ext_scenario in extracted_scenarios:
+                scenario = Scenario(
+                    title=ext_scenario.title,
+                    given=ext_scenario.given,
+                    when=ext_scenario.when,
+                    then=ext_scenario.then,
+                    status=ScenarioStatus.DRAFT,
+                    entities=ext_scenario.entities
+                )
+                self.state.scenarios.append(scenario)
+                print(f"✅ Fallback scenario: {ext_scenario.title}")
         
         # Extract constraints using NLP
         extracted_constraints = self.nlp_extractor.extract_constraints(user_message)

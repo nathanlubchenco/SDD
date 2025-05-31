@@ -13,6 +13,7 @@ import uvicorn
 
 from conversation_engine import ConversationEngine
 from models import ConversationState, Message, Entity, Scenario, Constraint
+from scenario_builder import ScenarioBuilder
 
 # Initialize FastAPI app
 app = FastAPI(title="SDD Interactive Builder Backend", version="1.0.0")
@@ -75,6 +76,96 @@ async def reset_conversation(session_id: str):
         conversation_sessions[session_id] = ConversationEngine(session_id)
     
     return {"status": "reset", "session_id": session_id}
+
+class ScenarioExtractionRequest(BaseModel):
+    text: str
+    entities: List[str] = []
+
+@app.post("/api/scenarios/extract")
+async def extract_scenarios(request: ScenarioExtractionRequest):
+    """Extract scenarios from text using real-time scenario builder"""
+    try:
+        scenario_builder = ScenarioBuilder()
+        scenarios = scenario_builder.extract_scenarios_from_text(
+            request.text,
+            entities=request.entities
+        )
+        
+        # Convert to dictionary format for API response
+        result = []
+        for scenario in scenarios:
+            scenario_dict = scenario_builder.to_dict(scenario)
+            result.append(scenario_dict)
+        
+        return {
+            "scenarios": result,
+            "count": len(result),
+            "extracted_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Scenario extraction failed: {str(e)}")
+
+@app.post("/api/scenarios/suggest-completion")
+async def suggest_scenario_completion(request: Dict[str, Any]):
+    """Suggest completions for partial scenarios"""
+    try:
+        scenario_builder = ScenarioBuilder()
+        
+        # Extract current scenario components
+        given_text = request.get("given", "")
+        when_text = request.get("when", "")
+        then_text = request.get("then", "")
+        entities = request.get("entities", [])
+        
+        # Build a text representation
+        scenario_text = f"Given {given_text}. When {when_text}. Then {then_text}."
+        
+        # Extract and analyze
+        scenarios = scenario_builder.extract_scenarios_from_text(scenario_text, entities)
+        
+        if scenarios:
+            scenario = scenarios[0]
+            suggestions = scenario.completion_suggestions
+            validation_issues = scenario.validation_issues
+            
+            # Also get related scenario suggestions
+            related_suggestions = scenario_builder.suggest_related_scenarios(scenario, entities)
+            
+            return {
+                "completion_suggestions": [
+                    {
+                        "component_type": s.component_type,
+                        "suggestion": s.suggestion,
+                        "reasoning": s.reasoning,
+                        "confidence": s.confidence,
+                        "context_entities": s.context_entities
+                    }
+                    for s in suggestions
+                ],
+                "validation_issues": validation_issues,
+                "related_scenarios": related_suggestions,
+                "scenario_confidence": scenario.confidence
+            }
+        else:
+            return {
+                "completion_suggestions": [],
+                "validation_issues": ["No recognizable scenario pattern found"],
+                "related_scenarios": [],
+                "scenario_confidence": 0.0
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Suggestion generation failed: {str(e)}")
+
+@app.get("/api/scenarios/templates")
+async def get_scenario_templates():
+    """Get pre-defined scenario templates"""
+    scenario_builder = ScenarioBuilder()
+    return {
+        "templates": scenario_builder.scenario_templates,
+        "domain_patterns": scenario_builder.domain_patterns
+    }
 
 # Socket.IO event handlers
 @sio.event
