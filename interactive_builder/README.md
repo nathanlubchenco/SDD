@@ -31,27 +31,39 @@ An interactive, conversational interface that guides users through discovering a
 - Python 3.11+
 - OpenAI API key (or Anthropic API key)
 
-### 1. Clone and Setup
+### 1. Automated Setup (Recommended)
+
+```bash
+cd interactive_builder
+
+# Set your API key first
+export OPENAI_API_KEY=your_api_key_here
+# or
+export ANTHROPIC_API_KEY=your_api_key_here
+
+# Run the automated setup script
+./setup.sh
+```
+
+### 2. Manual Setup (Alternative)
 
 ```bash
 cd interactive_builder
 
 # Backend setup
 cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-
-# Copy environment file and configure
-cp .env.example .env
-# Edit .env with your API keys
+pip install --upgrade pip
+pip install -r requirements-base.txt
+python -m spacy download en_core_web_sm  # Optional: for advanced NLP
 
 # Frontend setup
 cd ../frontend
 npm install
 ```
 
-### 2. Set Environment Variables
+### 3. Set Environment Variables
 
 The interactive builder uses the same environment variables as the main SDD project:
 
@@ -67,21 +79,45 @@ export AI_PROVIDER=openai  # or anthropic (defaults to openai)
 export OPENAI_MODEL=gpt-4-turbo-preview  # custom model
 ```
 
-### 3. Start Development Servers
+### 4. Start Development Servers
 
 ```bash
-# Terminal 1: Start backend
-cd backend
-python main.py
+# Automated startup (recommended)
+./start.sh
 
-# Terminal 2: Start frontend
-cd frontend
-npm run dev
+# Or manually in separate terminals:
+# Terminal 1: Start backend
+cd backend && source venv/bin/activate && python main.py
+
+# Terminal 2: Start frontend  
+cd frontend && npm run dev
 ```
 
-### 4. Open the Application
+### 5. Open the Application
 
 Visit `http://localhost:3000` in your browser and start building!
+
+## 🔧 Troubleshooting
+
+### Common Setup Issues
+
+**spaCy Model Installation Failed:**
+- Advanced NLP features will be limited but basic extraction still works
+- You can manually install: `python -m spacy download en_core_web_sm`
+
+**Port Conflicts:**
+- Use alternative ports: `./start_alt.sh` (backend: 8001, frontend: 3001)
+- Or manually change ports in configuration files
+
+**WebSocket Connection Issues:**
+- Run diagnostics: `./debug.sh`
+- Check that both backend and frontend are running
+- Verify API keys are set in environment
+
+**Dependency Resolution Problems:**
+- Try manual setup instead of automated setup
+- Use `requirements-base.txt` for core dependencies only
+- Update pip: `pip install --upgrade pip`
 
 ## 🎯 Usage Guide
 
