@@ -300,40 +300,53 @@ Return only the optimized Dockerfile content.
                                constraints: Optional[Dict[str, Any]],
                                environment: str,
                                optimization_goals: Optional[List[str]]) -> str:
-        """Build comprehensive prompt for Dockerfile generation."""
+        """Build comprehensive prompt for Dockerfile generation using SDD principles."""
         
         optimization_goals = optimization_goals or ["security", "performance"]
         constraints = constraints or {}
         
         return f"""
-You are a Docker expert specializing in optimized container generation. Generate a production-ready Dockerfile for this project.
+You are an SDD-focused Docker expert. Generate a production-ready Dockerfile that enables the behavioral requirements to run reliably in containerized environments.
 
-## Code Analysis
+## Behavioral Application Analysis
 Language: {code_analysis.get('language', 'Python')}
-Dependencies: {list(code_analysis.get('dependencies', []))}
-Has Web Server: {code_analysis.get('has_web_server', False)}
-Has Database: {code_analysis.get('has_database', False)}
-Has Async: {code_analysis.get('has_async', False)}
-Ports: {code_analysis.get('ports', [])}
+Runtime Dependencies: {list(code_analysis.get('dependencies', []))}
+Serves Behavioral Endpoints: {code_analysis.get('has_web_server', False)}
+Manages State/Data: {code_analysis.get('has_database', False)}
+Handles Concurrent Behaviors: {code_analysis.get('has_async', False)}
+Behavioral Interface Ports: {code_analysis.get('ports', [])}
 
-## Environment & Requirements
+## Behavioral Constraints & Environment
 Target Environment: {environment}
-Optimization Goals: {', '.join(optimization_goals)}
-Constraints: {json.dumps(constraints, indent=2)}
+Behavioral Optimization Goals: {', '.join(optimization_goals)}
+Operational Constraints: {json.dumps(constraints, indent=2)}
 
-## Requirements
-Generate a Dockerfile that:
-1. Uses appropriate base image for the detected language/framework
-2. Implements multi-stage builds if beneficial for size optimization
-3. Follows security best practices (non-root user, minimal attack surface)
-4. Optimizes for the specified goals: {', '.join(optimization_goals)}
-5. Includes proper health checks if web server detected
-6. Handles dependencies efficiently with layer caching
-7. Sets appropriate environment variables and working directory
+## SDD CONTAINERIZATION PRINCIPLES
+1. Containers must preserve all specified behavioral guarantees
+2. Runtime environment should not interfere with behavioral scenarios
+3. Container health checks should verify behavioral endpoints, not just technical metrics
+4. Security measures must protect behavioral integrity
+5. Performance optimizations must not compromise behavioral requirements
+
+## Dockerfile Requirements
+Generate a Dockerfile that enables reliable behavioral execution:
+1. Choose base image that best supports the behavioral runtime requirements
+2. Implement multi-stage builds to optimize behavioral application delivery
+3. Configure security to protect behavioral endpoints and data
+4. Optimize for specified behavioral goals: {', '.join(optimization_goals)}
+5. Include health checks that verify core behavioral functionality
+6. Handle behavioral dependencies with proper layer caching
+7. Set environment for optimal behavioral execution
+8. Ensure non-root execution preserves all behavioral capabilities
+9. Configure logging to capture behavioral outcomes, not just technical events
+10. Support behavioral monitoring and observability requirements
+
+## Critical Focus
+The container must be a transparent wrapper around the behavioral implementation - it should never interfere with or alter the specified system behaviors.
 
 ## Output Format
-Return ONLY the Dockerfile content, no explanations or markdown formatting.
-Start with FROM instruction and include all necessary commands.
+Return ONLY the Dockerfile content optimized for behavioral reliability.
+Include comments explaining how configuration choices support behavioral requirements.
 """
 
     def _build_compose_prompt(self,
@@ -341,33 +354,48 @@ Start with FROM instruction and include all necessary commands.
                             networking: Optional[Dict[str, Any]],
                             volumes: Optional[List[str]],
                             environment: str) -> str:
-        """Build prompt for docker-compose generation."""
+        """Build prompt for docker-compose generation using SDD principles."""
         
         return f"""
-You are a Docker Compose expert. Generate a docker-compose.yml file for this multi-service application.
+You are an SDD-focused Docker Compose expert. Generate a docker-compose.yml that orchestrates multiple services to deliver the complete behavioral specification reliably.
 
-## Services
+## Behavioral Services Configuration
 {json.dumps(services, indent=2)}
 
-## Networking Requirements  
+## Inter-Service Behavioral Communication
 {json.dumps(networking or {}, indent=2)}
 
-## Volume Requirements
+## Behavioral State Persistence
 {volumes or []}
 
-## Environment
+## Deployment Environment
 Target: {environment}
 
-## Requirements
-Generate a docker-compose.yml that:
-1. Defines all required services with proper configuration
-2. Sets up appropriate networking between services
-3. Configures required volumes for data persistence
-4. Includes health checks and restart policies
-5. Uses environment-appropriate settings for {environment}
-6. Follows Docker Compose best practices
+## SDD ORCHESTRATION PRINCIPLES
+1. Service communication must preserve behavioral contracts between components
+2. Startup order should ensure behavioral dependencies are met
+3. Health checks must verify behavioral readiness, not just technical startup
+4. Service networking must support all required behavioral interactions
+5. Data persistence must maintain behavioral state integrity
+6. Service restarts must preserve ongoing behavioral commitments
 
-Return ONLY the docker-compose.yml content in valid YAML format.
+## Docker Compose Requirements
+Generate a docker-compose.yml that enables reliable multi-service behavioral execution:
+1. Define services with configuration that supports their behavioral responsibilities
+2. Establish networking that enables proper behavioral communication patterns
+3. Configure volumes that preserve behavioral state and data integrity
+4. Implement health checks that verify behavioral endpoints and dependencies
+5. Set up restart policies that maintain behavioral availability
+6. Use environment-appropriate settings for {environment} deployment
+7. Include dependency management that respects behavioral startup requirements
+8. Configure logging to capture inter-service behavioral interactions
+9. Set resource limits that ensure behavioral performance guarantees
+10. Enable behavioral monitoring across the service topology
+
+## Critical Focus
+The orchestration must ensure that all behavioral scenarios work correctly across the distributed service architecture. No behavioral requirement should be compromised by the containerization or service boundaries.
+
+Return ONLY the docker-compose.yml content in valid YAML format with comments explaining behavioral architecture decisions.
 """
 
     def _post_process_dockerfile(self, response: str) -> str:

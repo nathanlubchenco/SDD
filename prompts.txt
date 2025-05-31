@@ -1,0 +1,243 @@
+Here are the improved prompts, each optimized for SDD's philosophy while maintaining their specific purposes:
+Prompt 1: Initial Code Generation
+pythonprompt = f"""
+You are implementing a Specification-Driven Development (SDD) system where behavior is paramount and implementation details are secondary.
+
+BEHAVIORAL SPECIFICATION for {module_name}:
+{specification_text}
+
+GENERATION PRINCIPLES:
+1. The specification describes WHAT the system should do, not HOW
+2. Infer architectural patterns from the scenarios and constraints
+3. Choose implementations that best satisfy the behavioral requirements
+4. Optimize for clarity of behavior mapping over clever code
+
+CODE REQUIREMENTS:
+1. Every scenario must map clearly to code paths
+2. Include behavior-focused comments linking code to scenarios
+3. Generate comprehensive observability (logs that explain business behavior)
+4. Use type hints to document behavioral contracts
+5. Error messages should reference failed scenarios, not technical details
+6. Structure code to match scenario organization
+
+STYLE GUIDANCE:
+{json.dumps(style_preferences, indent=2) if style_preferences else "Use clear, behavior-centric Python conventions"}
+
+Return a JSON response:
+{{
+  "module_code": "// Generated implementation with scenario mappings",
+  "dependencies": ["required packages with versions"],
+  "scenario_mappings": {{
+    "scenario_name": "primary_function_implementing_it"
+  }},
+  "behavioral_contracts": ["key interfaces that enforce scenarios"],
+  "observability_points": ["where behavior is logged/monitored"],
+  "inferred_architecture": "brief explanation of WHY this structure was chosen"
+}}
+
+Remember: The code is disposable, but the behavior is sacred. Make the mapping between scenarios and implementation obvious.
+"""
+Prompt 2: Constraint-Driven Optimization
+pythonprompt = f"""
+You are optimizing code to meet behavioral constraints in an SDD system. The implementation can change completely as long as behavior remains identical.
+
+CURRENT IMPLEMENTATION:
+```python
+{current_code}
+BEHAVIORAL CONSTRAINTS TO SATISFY:
+{json.dumps(constraints, indent=2)}
+OPTIMIZATION PRIORITIES: {', '.join(optimization_focus)}
+OPTIMIZATION PRINCIPLES:
+
+Behavior is immutable - all scenarios must still pass
+Implementation is fluid - feel free to completely restructure
+If current approach can't meet constraints, try a different architecture
+Consider caching, parallelization, alternative algorithms, different data structures
+Performance constraints might require fundamental changes (e.g., sync → async)
+
+CONSTRAINT SATISFACTION STRATEGY:
+
+For latency: Consider caching, connection pooling, query optimization
+For throughput: Consider batching, streaming, parallelization
+For memory: Consider streaming processing, data structure optimization
+For scalability: Consider horizontal partitioning, stateless design
+
+Return optimized implementation as JSON:
+{{
+"optimized_code": "// New implementation with constraint annotations",
+"architectural_changes": ["fundamental changes made to meet constraints"],
+"constraint_achievement": {{
+"constraint_name": {{
+"status": "met|approaching|exceeded",
+"measurement": "actual measured or estimated value",
+"technique": "how this was achieved"
+}}
+}},
+"behavioral_verification": "confirmation that all scenarios still pass",
+"trade_offs": ["what was sacrificed for optimization", "why it's acceptable"]
+}}
+Be bold - completely different implementations are encouraged if they better meet constraints.
+"""
+
+## Prompt 3: Comprehensive Implementation
+
+```python
+return f"""
+You are building a complete SDD implementation where scenarios define the system and code is generated to satisfy them.
+
+BEHAVIORAL SCENARIOS (this is your requirements spec):
+{scenarios_text}
+
+OPERATIONAL CONSTRAINTS (non-functional requirements):
+{json.dumps(constraints, indent=2) if constraints else "Infer reasonable defaults"}
+
+IMPLEMENTATION CONTEXT:
+- Framework preference: {framework or "choose based on scenarios"}
+- Optimization focus: {optimization_level}
+
+IMPLEMENTATION PHILOSOPHY:
+1. Read scenarios as a story of how the system behaves
+2. Generate code that makes this story true
+3. Every code path should trace back to a scenario
+4. Include "scenario tests" that directly verify each scenario
+5. Add observability that explains behavior in business terms
+6. Structure modules around behavioral boundaries, not technical layers
+
+DELIVERABLES STRUCTURE:
+{{
+  "main_module": "// Implementation with embedded scenario documentation",
+  "test_module": "// Scenario-based tests that read like documentation",
+  "scenario_tests": {{
+    "scenario_name": "test function that verifies this exact scenario"
+  }},
+  "dependencies": ["packages chosen to best implement behaviors"],
+  "behavioral_modules": {{
+    "module_name": "which scenarios it implements"
+  }},
+  "api_design": {{
+    "endpoint": "which scenario it serves"
+  }},
+  "observability_plan": {{
+    "metric/log": "what behavior it monitors"
+  }},
+  "architecture_rationale": "why this design best serves the scenarios"
+}}
+
+Generate code that a new developer could understand by reading scenarios first, then seeing how code implements them. The test suite should read like executable documentation of the scenarios.
+"""
+Prompt 4: Behavioral Refinement
+pythonreturn f"""
+You are refining an SDD implementation to better satisfy its behavioral specification while addressing quality concerns.
+
+CURRENT SYSTEM STATE:
+```python
+{current_code}
+BEHAVIORAL TESTS:
+python{current_tests}
+BEHAVIORAL VIOLATIONS (highest priority):
+{json.dumps(test_failures, indent=2) if test_failures else "All scenarios currently satisfied"}
+CODE QUALITY CONCERNS (secondary priority):
+{json.dumps(quality_issues, indent=2) if quality_issues else "No quality issues identified"}
+ARCHITECTURAL IMPROVEMENTS (consider if helpful):
+{json.dumps(refactoring_suggestions, indent=2) if refactoring_suggestions else "Current architecture is adequate"}
+REFINEMENT GOALS:
+
+Behavioral Integrity: {preserve_functionality} (must remain 100%)
+Code Quality Target: {target_quality_score}/100
+Scenario Clarity: How obviously code maps to scenarios
+
+REFINEMENT PRIORITIES:
+
+Fix any behavioral violations (failed scenario tests)
+Improve scenario-to-code mapping clarity
+Enhance observability of business behavior
+Simplify complex code that obscures behavior
+Add missing edge cases discovered through testing
+Improve error messages to reference scenarios
+
+Return refined system as JSON:
+{{
+"main_module": "// Refined implementation with clearer behavior mapping",
+"test_module": "// Enhanced tests with better scenario coverage",
+"dependencies": ["updated if architectural changes require"],
+"behavioral_fixes": ["how each test failure was resolved"],
+"clarity_improvements": ["how scenario mapping was made clearer"],
+"edge_cases_added": ["new scenarios discovered and handled"],
+"observability_enhancements": ["better behavior monitoring added"],
+"quality_score_justification": "why the code now meets quality targets"
+}}
+Remember: In SDD, code quality means "how clearly does this implement the specified behavior?" not just traditional metrics.
+"""
+
+## Prompt 5: Scenario-First Generation
+
+```python
+return f"""
+Transform these behavioral scenarios into working code using SDD principles.
+
+SCENARIOS (your complete specification):
+{json.dumps(scenarios, indent=2)}
+
+CONSTRAINTS (operational requirements):
+{json.dumps(constraints, indent=2)}
+
+SCENARIO INTERPRETATION GUIDE:
+1. Each scenario is a promise about system behavior
+2. Given = preconditions/system state
+3. When = trigger/action/input
+4. Then = expected outcome/state change
+
+IMPLEMENTATION STRATEGY:
+1. Identify the core entities from scenario subjects
+2. Map actions to functions/methods
+3. Ensure state transitions match scenario expectations
+4. Generate code that makes scenarios executable
+5. Include scenario validation in the implementation
+
+DELIVERABLE:
+Clean Python code where:
+- Every public function maps to scenario actions
+- State changes match scenario expectations  
+- Error cases reference violated scenarios
+- Comments link code sections to scenarios
+- Tests are generated directly from scenarios
+
+Focus on making the scenarios come alive as working code.
+"""
+Prompt 6: Behavioral Issue Resolution
+pythonreturn f"""
+Refine this SDD implementation to better satisfy its behavioral specification.
+
+CURRENT IMPLEMENTATION:
+{code}
+
+BEHAVIORAL ISSUES (scenarios not properly implemented):
+{json.dumps(issues, indent=2)}
+
+RESOLUTION APPROACH:
+1. Each issue represents a gap between specified and actual behavior
+2. Code changes must make the scenarios true
+3. Don't just fix symptoms - ensure the scenario is properly modeled
+4. Add observability to prove the behavior is now correct
+
+REFINEMENT GUIDELINES:
+- Trace each issue back to its originating scenario
+- Modify code to make that scenario pass
+- Ensure changes don't break other scenarios
+- Improve code clarity around the problematic behavior
+- Add comments explaining the scenario being implemented
+
+Return code that demonstrably satisfies all scenarios, with clear mappings between specification and implementation.
+"""
+Key Improvements Made:
+
+Behavior-First Language: Every prompt now emphasizes scenarios and behavior over technical implementation
+Scenario Mapping: Added explicit requirements to map code back to scenarios
+Observability Focus: Emphasized behavior-centric logging and monitoring
+Flexible Architecture: Encouraged complete reimplementation if it better serves constraints
+Test as Documentation: Tests should read like executable scenarios
+Business Language: Error messages and logs speak in terms of scenarios, not technical details
+Clear Priorities: Behavioral correctness > Code quality > Performance
+SDD Philosophy: Each prompt reinforces that code is disposable but behavior is sacred
+
+These prompts will guide the AI to generate implementations that truly embody SDD principles while maintaining their specific purposes in your system.

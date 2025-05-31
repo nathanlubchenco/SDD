@@ -1,0 +1,45 @@
+scenarios:
+  - scenario: Container deployment
+    given: A web service application
+    when: User builds Docker image
+    then: Image is created successfully with optimized layers
+    
+  - scenario: Multi-container orchestration
+    given: Web service and database components  
+    when: User runs docker-compose up
+    then: All containers start and communicate properly
+    
+  - scenario: Container health monitoring
+    given: Running containerized service
+    when: System checks container health
+    then: Health status is reported accurately
+    
+  - scenario: Resource management
+    given: Multiple containers running
+    when: System monitors resource usage
+    then: Resources are allocated efficiently within limits
+
+constraints:
+  performance:
+    - name: Container startup time
+      requirement: Containers start in under 30 seconds
+    - name: Image size optimization
+      requirement: Base image under 500MB
+  
+  reliability:
+    - name: Health check implementation
+      requirement: Health endpoints respond within 5 seconds
+    - name: Graceful shutdown
+      requirement: Containers stop cleanly within 15 seconds
+      
+  security:
+    - name: Base image security
+      requirement: Use official images with latest security patches
+    - name: Non-root execution
+      requirement: Containers run as non-root user
+      
+  scalability:
+    - name: Horizontal scaling
+      requirement: Support scaling up to 10 replicas
+    - name: Resource efficiency
+      requirement: Memory usage under 512MB per container

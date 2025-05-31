@@ -701,7 +701,7 @@ Return optimized code in JSON format:
                                    framework: str,
                                    optimization_level: str,
                                    api_docs_context: Dict[str, Any] = {}) -> str:
-        """Build comprehensive prompt for implementation generation."""
+        """Build comprehensive prompt for implementation generation using SDD principles."""
         
         scenarios_text = "\n".join([
             f"Scenario: {s.get('scenario', 'Unnamed')}\n"
@@ -715,52 +715,71 @@ Return optimized code in JSON format:
         api_context_section = ""
         if api_docs_context.get("enhanced"):
             api_context_section = f"""
-API DOCUMENTATION CONTEXT:
+TECHNICAL CONTEXT (for implementation guidance):
 {self._format_api_docs_for_prompt(api_docs_context)}
 
 """
 
         return f"""
-You are an expert Python developer. Generate a complete, WORKING Python implementation based on these specifications.
+You are implementing a Specification-Driven Development (SDD) system where behavior is paramount and implementation details are secondary.
 
-CRITICAL: Generate ACTUAL EXECUTABLE PYTHON CODE, not placeholders, filenames, or descriptions.
-
-BEHAVIORAL SCENARIOS:
+BEHAVIORAL SPECIFICATION (this is your requirements document):
 {scenarios_text}
 
-CONSTRAINTS:
-{json.dumps(constraints, indent=2) if constraints else "No specific constraints"}
+OPERATIONAL CONSTRAINTS (non-functional requirements):
+{json.dumps(constraints, indent=2) if constraints else "Infer reasonable defaults from scenarios"}
 
-FRAMEWORK: {framework}
-OPTIMIZATION LEVEL: {optimization_level}
+IMPLEMENTATION CONTEXT:
+- Framework preference: {framework}
+- Optimization focus: {optimization_level}
 
-{api_context_section}MANDATORY REQUIREMENTS:
-1. The "main_module" field MUST contain complete, executable Python code (classes, functions, imports)
-2. The "test_module" field MUST contain complete, runnable pytest test code
-3. NO placeholders like "main_module.py", "implementation code here", or "# TODO"
-4. Generate REAL imports, REAL class definitions, REAL function implementations
-5. Include comprehensive type hints and docstrings
-6. Implement proper error handling
-7. Follow {framework} best practices if applicable
-8. Make the code {optimization_level} for the specified optimization level
+{api_context_section}SDD IMPLEMENTATION PRINCIPLES:
+1. Each scenario describes WHAT the system should do, not HOW
+2. Your code must make every scenario demonstrably true
+3. Structure code to match scenario organization, not technical layers  
+4. Every public function should map clearly to scenario actions
+5. Error messages must reference violated scenarios, not technical details
+6. Include behavior-focused comments linking code sections to scenarios
+7. Generate comprehensive observability that explains business behavior
+8. Code is disposable, behavior is sacred - choose the clearest implementation
 
-EXAMPLE OF WHAT TO GENERATE:
-- main_module: "from typing import Dict\\nimport json\\n\\nclass DataService:\\n    def __init__(self):\\n        self.data = {{}}\\n..."
-- test_module: "import pytest\\nfrom main import DataService\\n\\ndef test_data_service():\\n    service = DataService()\\n..."
+MANDATORY DELIVERABLES:
+1. "main_module": Complete executable Python code with scenario mappings
+2. "test_module": Scenario-based tests that read like executable documentation
+3. "scenario_mappings": Map each scenario to the primary function implementing it
+4. "behavioral_contracts": Key interfaces that enforce scenario behavior
+5. "observability_points": Where business behavior is logged/monitored
 
-Return your implementation in this JSON format:
+ARCHITECTURAL REQUIREMENTS:
+- Every code path must trace back to a scenario
+- Business logic should be separated from technical infrastructure
+- Error handling must explain which scenario was violated
+- Include logging that explains behavior in business terms
+- Tests should verify scenarios directly, not just technical functionality
+
+CRITICAL IMPLEMENTATION STANDARDS:
+1. Generate ACTUAL EXECUTABLE PYTHON CODE (no placeholders or descriptions)
+2. Include comprehensive type hints and behavior-focused docstrings
+3. Implement proper error handling with scenario-referenced messages
+4. Follow {framework} best practices while prioritizing behavior clarity
+5. Make code {optimization_level} but never at the expense of scenario clarity
+
+Return implementation in this JSON format:
 {{
-  "main_module": "COMPLETE EXECUTABLE PYTHON CODE HERE",
-  "test_module": "COMPLETE EXECUTABLE PYTEST CODE HERE", 
-  "dependencies": ["list", "of", "required", "packages"],
-  "service_name": "suggested service name",
-  "module_name": "main module name",
-  "key_classes": ["list", "of", "main", "classes"],
-  "key_functions": ["list", "of", "main", "functions"],
-  "api_endpoints": ["list", "of", "endpoints", "if", "applicable"]
+  "main_module": "COMPLETE EXECUTABLE PYTHON CODE with scenario comments",
+  "test_module": "SCENARIO-BASED TESTS that read like documentation",
+  "dependencies": ["packages chosen to best implement behaviors"],
+  "service_name": "descriptive name reflecting primary scenarios",
+  "scenario_mappings": {{
+    "scenario_name": "primary_function_implementing_it"
+  }},
+  "behavioral_contracts": ["key interfaces that enforce scenarios"],
+  "observability_points": ["where behavior is logged/monitored"],
+  "api_endpoints": ["endpoint": "which scenario it serves"],
+  "architecture_rationale": "why this design best serves the scenarios"
 }}
 
-CRITICAL: Ensure main_module and test_module contain ACTUAL WORKING PYTHON CODE that can be saved to .py files and executed immediately.
+Remember: Generate code that a new developer could understand by reading scenarios first, then seeing how code implements them. The test suite should read like executable documentation of the scenarios.
 """
 
     def _build_refinement_prompt(self,
@@ -771,58 +790,74 @@ CRITICAL: Ensure main_module and test_module contain ACTUAL WORKING PYTHON CODE 
                                refactoring_suggestions: List[Dict[str, Any]],
                                target_quality_score: int,
                                preserve_functionality: bool) -> str:
-        """Build prompt for implementation refinement."""
+        """Build prompt for implementation refinement using SDD principles."""
         
         return f"""
-You are an expert Python developer. Refine this implementation to address the identified issues and improve quality.
+You are refining an SDD implementation to better satisfy its behavioral specification while addressing quality concerns.
 
-CRITICAL: Generate ACTUAL EXECUTABLE PYTHON CODE, not placeholders, filenames, or descriptions.
-
-CURRENT IMPLEMENTATION:
+CURRENT SYSTEM STATE:
 ```python
 {current_code}
 ```
 
-CURRENT TESTS:
+BEHAVIORAL TESTS:
 ```python
 {current_tests}
 ```
 
-TEST FAILURES TO ADDRESS:
-{json.dumps(test_failures, indent=2) if test_failures else "No test failures"}
+BEHAVIORAL VIOLATIONS (highest priority):
+{json.dumps(test_failures, indent=2) if test_failures else "All scenarios currently satisfied"}
 
-QUALITY ISSUES TO FIX:
-{json.dumps(quality_issues, indent=2) if quality_issues else "No quality issues"}
+CODE QUALITY CONCERNS (secondary priority):
+{json.dumps(quality_issues, indent=2) if quality_issues else "No quality issues identified"}
 
-REFACTORING SUGGESTIONS:
-{json.dumps(refactoring_suggestions, indent=2) if refactoring_suggestions else "No suggestions"}
+ARCHITECTURAL IMPROVEMENTS (consider if helpful):
+{json.dumps(refactoring_suggestions, indent=2) if refactoring_suggestions else "Current architecture is adequate"}
 
-TARGET QUALITY SCORE: {target_quality_score}/100
-PRESERVE FUNCTIONALITY: {preserve_functionality}
+REFINEMENT GOALS:
+- Behavioral Integrity: {preserve_functionality} (must remain 100%)
+- Code Quality Target: {target_quality_score}/100
+- Scenario Clarity: How obviously code maps to scenarios
 
-MANDATORY REQUIREMENTS:
-1. The "main_module" field MUST contain complete, executable Python code
-2. The "test_module" field MUST contain complete, runnable pytest test code  
-3. NO placeholders like "refined Python implementation", "updated test code", or "# TODO"
-4. Generate REAL improvements to the existing code
-5. Fix all test failures while preserving functionality
-6. Address all quality issues (complexity, readability, maintainability)
-7. Apply relevant refactoring suggestions
-8. Improve code structure and design patterns
-9. Enhance error handling and edge cases
-10. Update tests to match any interface changes
+SDD REFINEMENT PRIORITIES:
+1. Fix any behavioral violations (failed scenario tests) 
+2. Improve scenario-to-code mapping clarity
+3. Enhance observability of business behavior
+4. Simplify complex code that obscures behavior
+5. Add missing edge cases discovered through testing
+6. Improve error messages to reference scenarios
+7. Strengthen behavioral contracts and interfaces
 
-Return the refined implementation in JSON format:
+REFINEMENT PRINCIPLES:
+- Each issue represents a gap between specified and actual behavior
+- Code changes must make the scenarios true
+- Don't just fix symptoms - ensure the scenario is properly modeled
+- Add observability to prove the behavior is now correct
+- Trace each issue back to its originating scenario
+- Ensure changes don't break other scenarios
+- Improve code clarity around the problematic behavior
+
+CRITICAL STANDARDS:
+1. Generate ACTUAL EXECUTABLE PYTHON CODE (no placeholders)
+2. Maintain all existing behavioral guarantees
+3. Enhance scenario traceability in code structure
+4. Improve business-focused error messages and logging
+5. Strengthen the mapping between scenarios and implementation
+
+Return refined system in JSON format:
 {{
-  "main_module": "COMPLETE EXECUTABLE PYTHON CODE HERE",
-  "test_module": "COMPLETE EXECUTABLE PYTEST CODE HERE",
-  "dependencies": ["updated", "dependencies"],
-  "improvements_made": ["list", "of", "improvements"],
-  "issues_fixed": ["list", "of", "fixed", "issues"],
-  "quality_enhancements": ["list", "of", "quality", "improvements"]
+  "main_module": "COMPLETE EXECUTABLE PYTHON CODE with clearer behavior mapping",
+  "test_module": "ENHANCED TESTS with better scenario coverage",
+  "dependencies": ["updated if architectural changes require"],
+  "behavioral_fixes": ["how each test failure was resolved"],
+  "clarity_improvements": ["how scenario mapping was made clearer"],
+  "edge_cases_added": ["new scenarios discovered and handled"],
+  "observability_enhancements": ["better behavior monitoring added"],
+  "scenario_mappings": {{"scenario": "implementing_function"}},
+  "quality_score_justification": "why the code now meets quality targets"
 }}
 
-CRITICAL: Ensure main_module and test_module contain ACTUAL WORKING PYTHON CODE that can be saved to .py files and executed immediately.
+Remember: In SDD, code quality means "how clearly does this implement the specified behavior?" not just traditional metrics. The refined code should demonstrably satisfy all scenarios with obvious traceability.
 """
 
     def _parse_implementation_response(self, response: str, include_tests: bool = True) -> Dict[str, Any]:

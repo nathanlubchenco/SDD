@@ -498,7 +498,7 @@ class TestingMCPServer(BaseMCPServer):
 
         # Build analysis prompt
         prompt = f"""
-You are an expert software engineer analyzing test failures. Help identify the root cause and suggest specific fixes.
+You are an SDD expert analyzing behavioral test failures. Focus on understanding which specified behaviors are not being properly implemented.
 
 FAILED TEST OUTPUT:
 {test_output}
@@ -508,33 +508,47 @@ IMPLEMENTATION CODE:
 {implementation_code}
 ```
 
-TEST CODE:
+BEHAVIORAL TEST CODE:
 ```python
 {test_code}
 ```
 
 EXPECTED BEHAVIOR:
-{expected_behavior or "Not specified"}
+{expected_behavior or "Not specified - infer from test structure"}
+
+SDD FAILURE ANALYSIS PRINCIPLES:
+Each test failure represents a gap between specified behavior and actual implementation. Your job is to identify which behavioral specification is not being satisfied and why.
+
+BEHAVIORAL ANALYSIS FOCUS:
+1. Which scenario or behavior is failing to be implemented correctly?
+2. Is the implementation missing behavioral logic, or is the test poorly written?
+3. Does the failure indicate a misunderstanding of the required behavior?
+4. Are there behavioral edge cases that weren't properly considered?
 
 Analyze the failure and provide:
-1. Root cause identification
-2. Specific code changes needed
-3. Whether the issue is in implementation or test
-4. Suggested fixes with code examples
+1. Behavioral root cause: Which specified behavior is not working?
+2. Implementation vs specification gap analysis
+3. Whether the issue is behavioral logic, test design, or specification clarity
+4. Behavioral fixes that make the scenario work as intended
 
 Format as JSON:
 {{
-  "root_cause": "description of what went wrong",
-  "issue_location": "implementation|test|both",
+  "behavioral_root_cause": "which specified behavior is failing and why",
+  "failed_scenario": "description of the behavioral scenario that's not working",
+  "implementation_gap": "what behavioral logic is missing or incorrect",
+  "issue_location": "implementation|test|specification|both",
   "confidence": 0-100,
-  "suggested_fixes": [
+  "behavioral_fixes": [
     {{
-      "description": "what to change",
-      "code_change": "specific code to modify",
-      "file": "implementation|test"
+      "description": "what behavioral change is needed",
+      "behavioral_rationale": "why this change makes the scenario work",
+      "code_change": "specific implementation change",
+      "file": "implementation|test",
+      "scenario_impact": "how this affects the overall behavior"
     }}
   ],
-  "additional_tests": ["suggestions for additional test cases"]
+  "missing_behaviors": ["behavioral scenarios that should be tested but aren't"],
+  "scenario_clarity_issues": ["ways the behavioral specification could be clearer"]
 }}
 """
 

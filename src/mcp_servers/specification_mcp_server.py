@@ -453,67 +453,100 @@ class SpecificationMCPServer(BaseMCPServer):
 
     # Prompt building methods
     def _build_validation_prompt(self, scenario: Dict, domain: str, existing_scenarios: List[Dict], constraints: Dict) -> str:
-        """Build prompt for AI scenario validation."""
+        """Build prompt for AI scenario validation using SDD principles."""
         return f"""
-You are a software specification expert. Validate this scenario for quality, conflicts, and completeness.
+You are an SDD specification expert. Validate this behavioral scenario for clarity, implementability, and behavioral completeness.
 
 Domain: {domain}
 Scenario to validate:
 {yaml.dump(scenario, default_flow_style=False)}
 
 Existing scenarios in domain:
-{yaml.dump(existing_scenarios[:5], default_flow_style=False)}  # Limit for context
+{yaml.dump(existing_scenarios[:5], default_flow_style=False)}  # Behavioral context
 
 Domain constraints:
 {yaml.dump(constraints, default_flow_style=False)}
 
+SDD VALIDATION CRITERIA:
+1. BEHAVIORAL CLARITY: Does the scenario describe observable system behavior?
+2. IMPLEMENTATION INDEPENDENCE: Does it specify WHAT happens, not HOW?
+3. TESTABILITY: Can this scenario be directly executed as a test?
+4. BUSINESS VALUE: Does it represent meaningful user or system behavior?
+5. SCENARIO COMPLETENESS: Are Given/When/Then elements sufficient for implementation?
+6. BEHAVIORAL CONSISTENCY: Does it conflict with or duplicate existing behaviors?
+
+VALIDATION FOCUS:
+- Given: Are preconditions clear and realistic?
+- When: Is the trigger action specific and testable?
+- Then: Are expected outcomes observable and verifiable?
+- Business Logic: Does this represent real-world behavior?
+- Error Handling: Are failure scenarios properly specified?
+
 Analyze the scenario and provide:
-1. Conflicts with existing scenarios
-2. Completeness issues (missing Given/When/Then elements)
-3. Clarity and testability concerns
-4. Suggestions for improvement
+1. Behavioral conflicts with existing scenarios
+2. Missing elements that prevent implementation
+3. Clarity issues that obscure business intent
+4. Testability concerns that prevent verification
+5. Suggestions to improve behavioral specification
 
 Format response as JSON:
 {{
   "valid": true/false,
-  "conflicts": [list of conflict descriptions],
-  "warnings": [list of warnings],
-  "suggestions": [list of improvement suggestions],
+  "behavioral_clarity": 0-100,
+  "implementability": 0-100,
+  "conflicts": ["behavioral conflicts with existing scenarios"],
+  "warnings": ["potential issues with behavioral specification"],
+  "suggestions": ["specific improvements for better behavior definition"],
   "quality_score": 0-100,
-  "missing_elements": [list of missing elements]
+  "missing_elements": ["required elements for complete behavior specification"],
+  "business_value_assessment": "how this scenario serves user/system needs"
 }}
 """
 
     def _build_edge_case_prompt(self, domain: str, base_scenarios: List[Dict], constraints: Dict, edge_case_types: List[str]) -> str:
-        """Build prompt for edge case generation."""
+        """Build prompt for edge case generation using SDD principles."""
         return f"""
-You are an expert at finding edge cases and boundary conditions in software systems.
+You are an SDD expert at discovering edge case behaviors that complement the main behavioral scenarios.
 
 Domain: {domain}
-Focus on these edge case types: {', '.join(edge_case_types)}
+Focus on these behavioral edge case types: {', '.join(edge_case_types)}
 
-Base scenarios:
+Base behavioral scenarios:
 {yaml.dump(base_scenarios, default_flow_style=False)}
 
 Domain constraints:
 {yaml.dump(constraints, default_flow_style=False)}
 
-Generate 3-5 edge case scenarios that test:
-- Boundary conditions
-- Error states
-- Security vulnerabilities  
-- Performance limits
-- Data validation edge cases
+SDD EDGE CASE PHILOSOPHY:
+Edge cases are not just technical failures - they are alternative behavioral paths that must be properly specified and handled. Each edge case represents a scenario where the system's behavior differs from the happy path.
 
-For each edge case, provide:
-- name: descriptive name
-- description: what this tests
-- given: initial conditions
-- when: trigger action
-- then: expected behavior
-- edge_case_type: category of edge case
+BEHAVIORAL EDGE CASE CATEGORIES:
+- Boundary behaviors: How system behaves at limits
+- Error behaviors: What happens when preconditions fail
+- Security behaviors: How system protects against misuse
+- Performance behaviors: System behavior under load/stress
+- Data validation behaviors: How invalid inputs are handled
+- Business rule violations: When business constraints are violated
 
-Return as YAML array of scenarios.
+Generate 3-5 edge case scenarios that specify:
+1. Alternative behavioral paths from base scenarios
+2. System behavior under exceptional conditions
+3. Recovery and error handling behaviors
+4. Boundary condition behaviors
+5. Security and validation behaviors
+
+For each edge case, provide behavioral specification:
+- scenario: descriptive name focusing on behavior
+- description: what behavioral aspect this tests
+- given: preconditions that lead to edge behavior
+- when: trigger that causes alternative behavior
+- then: expected system behavior (not just error messages)
+- edge_case_type: category of behavioral edge case
+- business_rationale: why this behavior matters to users/business
+
+CRITICAL: Focus on BEHAVIORAL outcomes, not technical implementation details. Each edge case should specify what the system DOES in these situations, not how it fails technically.
+
+Return as YAML array of behavioral scenarios.
 """
 
     def _build_coverage_analysis_prompt(self, domain: str, scenarios: List[Dict], constraints: Dict, coverage_goals: List[str]) -> str:
@@ -572,9 +605,9 @@ Return only the test code, no explanations.
 """
 
     def _build_enhancement_prompt(self, scenario: Dict, enhancement_goals: List[str], domain_context: Dict) -> str:
-        """Build prompt for scenario enhancement."""
+        """Build prompt for scenario enhancement using SDD principles."""
         return f"""
-Enhance this scenario specification for better {', '.join(enhancement_goals)}.
+Transform this scenario into a more behavior-focused specification using SDD principles for better {', '.join(enhancement_goals)}.
 
 Current scenario:
 {yaml.dump(scenario, default_flow_style=False)}
@@ -584,14 +617,33 @@ Domain context:
 
 Enhancement goals: {', '.join(enhancement_goals)}
 
-Improve the scenario by:
-1. Making descriptions clearer and more specific
-2. Adding missing Given/When/Then elements
-3. Improving testability
-4. Adding relevant edge cases or variations
-5. Ensuring consistency with domain context
+SDD ENHANCEMENT PRINCIPLES:
+1. Scenarios must describe OBSERVABLE BEHAVIOR, not implementation details
+2. Focus on WHAT the system does, never HOW it does it
+3. Use business language that stakeholders understand
+4. Ensure scenarios are directly implementable as tests
+5. Specify clear behavioral outcomes, not technical side effects
 
-Return the enhanced scenario in YAML format.
+BEHAVIORAL ENHANCEMENT CHECKLIST:
+- Given: Are preconditions expressed in business terms?
+- When: Is the trigger action something a user/system actually does?
+- Then: Do outcomes describe observable system behavior?
+- Language: Is this free of implementation details?
+- Testability: Can this be directly verified by automated tests?
+- Business Value: Does this represent meaningful user/business behavior?
+
+Enhance the scenario by:
+1. Converting technical language to behavioral language
+2. Ensuring Given/When/Then elements are complete and behavior-focused
+3. Improving clarity of expected behavioral outcomes
+4. Removing any implementation hints or technical details
+5. Strengthening the business context and value
+6. Making the scenario more directly testable
+7. Ensuring it fits naturally with domain behavioral patterns
+
+CRITICAL: The enhanced scenario should read like a story about system behavior that both business stakeholders and developers can understand and verify.
+
+Return the enhanced behavioral scenario in YAML format.
 """
 
     # Response parsing methods
