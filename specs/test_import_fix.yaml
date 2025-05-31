@@ -1,0 +1,15 @@
+scenarios:
+  - scenario: Simple data storage
+    given: A data storage service
+    when: User stores an item with name and value
+    then: Item is saved and can be retrieved later
+    
+  - scenario: Data retrieval  
+    given: Items stored in the service
+    when: User requests an item by ID
+    then: Correct item data is returned
+
+constraints:
+  performance:
+    - name: Response time
+      requirement: Operations complete within 100ms

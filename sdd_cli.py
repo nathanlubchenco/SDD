@@ -22,6 +22,33 @@ from src.core.ai_client import get_current_config, list_available_models
 from src.core.ai_config import test_client
 from src.core.sdd_logger import get_logger
 
+def fix_test_imports(test_code: str, actual_service_name: str) -> str:
+    """Fix common import issues in generated test code."""
+    import re
+    
+    # Common problematic import patterns to replace
+    problematic_imports = [
+        r'from main_module import',
+        r'from main import',
+        r'import main_module',
+        r'import main(?!\w)',  # import main but not mainframe, etc.
+        r'from \.main_module import',
+        r'from \.main import'
+    ]
+    
+    # Replace with correct import
+    fixed_code = test_code
+    for pattern in problematic_imports:
+        if re.search(pattern, fixed_code):
+            # Replace with actual service name
+            fixed_code = re.sub(pattern, f'from {actual_service_name} import', fixed_code)
+    
+    # Also fix any comments that still reference wrong module names
+    fixed_code = re.sub(r'# test_module\.py', f'# test_{actual_service_name}.py', fixed_code)
+    fixed_code = re.sub(r'""".*test_module.*"""', f'"""\nBehavioral tests for {actual_service_name}\n"""', fixed_code, flags=re.DOTALL)
+    
+    return fixed_code
+
 
 class SDDCli:
     """Main CLI application for SDD."""
@@ -382,18 +409,30 @@ Examples:
                         try:
                             files_written = []
                             
-                            # Write main module
+                            # Write main module - use service_name if available, otherwise fallback to output_dir.name
                             main_code = impl.get('main_module', '')
+                            service_name = impl.get('service_name', output_dir.name)
+                            # Ensure service_name is valid Python module name
+                            if service_name:
+                                # Convert to snake_case and remove invalid characters
+                                import re
+                                service_name = re.sub(r'[^a-zA-Z0-9_]', '_', service_name.lower())
+                                service_name = re.sub(r'_+', '_', service_name).strip('_')
+                            else:
+                                service_name = output_dir.name
+                            
                             if main_code:
-                                main_file = output_dir / f"{output_dir.name}.py"
+                                main_file = output_dir / f"{service_name}.py"
                                 with open(main_file, 'w') as f:
                                     f.write(main_code)
                                 files_written.append(main_file.name)
                             
-                            # Write test module
+                            # Write test module - use same service_name for consistency
                             test_code = impl.get('test_module', '')
                             if test_code:
-                                test_file = output_dir / f"test_{output_dir.name}.py"
+                                # Fix common import issues in test code
+                                test_code = fix_test_imports(test_code, service_name)
+                                test_file = output_dir / f"test_{service_name}.py"
                                 with open(test_file, 'w') as f:
                                     f.write(test_code)
                                 files_written.append(test_file.name)

@@ -244,7 +244,8 @@ class AnalysisMCPServer(BaseMCPServer):
                                   code: str,
                                   analysis_type: str = "comprehensive",
                                   language: str = "python",
-                                  include_suggestions: bool = True) -> Dict[str, Any]:
+                                  include_suggestions: bool = True,
+                                  completeness_analysis: Dict[str, Any] = None) -> Dict[str, Any]:
         """Perform comprehensive code quality analysis."""
         
         result = {
@@ -276,7 +277,7 @@ class AnalysisMCPServer(BaseMCPServer):
                 result["issues"] = self._identify_quality_issues(tree, code)
                 
                 # Calculate overall score
-                result["overall_score"] = self._calculate_overall_score(result["metrics"], result["issues"])
+                result["overall_score"] = self._calculate_overall_score(result["metrics"], result["issues"], completeness_analysis)
                 
                 # Generate suggestions if requested
                 if include_suggestions:
@@ -493,6 +494,8 @@ class AnalysisMCPServer(BaseMCPServer):
         
         if not self.ai_client:
             return self._fallback_refactoring_suggestions(code, refactoring_goals)
+        
+        # Note: Model-specific timeouts are now handled at the AI client level
 
         # First, analyze code quality to identify issues
         quality_analysis = await self._analyze_code_quality(code, include_suggestions=False)
@@ -705,11 +708,33 @@ Format as JSON:
         
         return issues
 
-    def _calculate_overall_score(self, metrics: Dict, issues: List) -> int:
-        """Calculate overall quality score."""
+    def _calculate_overall_score(self, metrics: Dict, issues: List, completeness_analysis: Dict[str, Any] = None) -> int:
+        """Calculate overall quality score with heavy penalties for incomplete implementations."""
         score = 100
         
-        # Penalize for issues
+        # CRITICAL: Heavy penalties for incomplete implementations (SDD principle: behavior must be fully implemented)
+        if completeness_analysis:
+            completeness_percentage = completeness_analysis.get("completeness_percentage", 100)
+            critical_issues = completeness_analysis.get("critical_issues", [])
+            severity_score = completeness_analysis.get("severity_score", 0)
+            
+            # Apply severe penalty for incomplete implementations
+            if completeness_percentage < 100:
+                # Direct penalty proportional to incompleteness
+                completeness_penalty = (100 - completeness_percentage) * 1.5  # 1.5x multiplier for incompleteness
+                score -= completeness_penalty
+                
+                # Additional penalty for critical issues (NotImplemented, TODO in core logic, etc.)
+                for issue in critical_issues:
+                    if issue["severity"] >= 40:  # High severity incomplete implementations
+                        score -= 25 * issue["count"]  # 25 points per critical incompleteness
+                    
+                # Log why score was heavily penalized
+                if completeness_penalty > 0:
+                    self.logger.warning(f"Quality score heavily penalized for incomplete implementation: "
+                                      f"-{completeness_penalty:.1f} points (completeness: {completeness_percentage}%)")
+        
+        # Penalize for other code quality issues
         for issue in issues:
             if issue["severity"] == "error":
                 score -= 20

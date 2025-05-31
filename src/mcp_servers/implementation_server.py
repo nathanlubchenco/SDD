@@ -301,6 +301,15 @@ class ImplementationMCPServer(BaseMCPServer):
         current_code = current_implementation.get("main_module", "")
         current_tests = current_implementation.get("test_module", "")
 
+        # Analyze current implementation for completeness issues
+        completeness_analysis = self._analyze_implementation_completeness(current_implementation)
+        
+        # Log completeness issues if any
+        if completeness_analysis["issues"]:
+            self.logger.warning(f"Refinement: Found {len(completeness_analysis['issues'])} completeness issues requiring immediate attention")
+            for issue in completeness_analysis["critical_issues"]:
+                self.logger.warning(f"Critical incompleteness: {issue['description']} ({issue['count']} occurrences)")
+
         # Build refinement prompt
         prompt = self._build_refinement_prompt(
             current_code=current_code,
@@ -309,7 +318,8 @@ class ImplementationMCPServer(BaseMCPServer):
             quality_issues=quality_issues,
             refactoring_suggestions=refactoring_suggestions,
             target_quality_score=target_quality_score,
-            preserve_functionality=preserve_functionality
+            preserve_functionality=preserve_functionality,
+            completeness_analysis=completeness_analysis
         )
 
         try:
@@ -757,29 +767,47 @@ ARCHITECTURAL REQUIREMENTS:
 - Include logging that explains behavior in business terms
 - Tests should verify scenarios directly, not just technical functionality
 
-CRITICAL IMPLEMENTATION STANDARDS:
-1. Generate ACTUAL EXECUTABLE PYTHON CODE (no placeholders or descriptions)
-2. Include comprehensive type hints and behavior-focused docstrings
-3. Implement proper error handling with scenario-referenced messages
-4. Follow {framework} best practices while prioritizing behavior clarity
-5. Make code {optimization_level} but never at the expense of scenario clarity
+IMPLEMENTATION COMPLETENESS REQUIREMENTS:
+1. Generate ACTUAL EXECUTABLE PYTHON CODE that fully implements every scenario
+2. Every function must have complete logic - no NotImplemented, TODO, or pass statements
+3. Each scenario must be demonstrably implementable by running the generated code
+4. If complexity requires initial placeholders, ensure they're marked for immediate refinement
+5. Include comprehensive type hints and behavior-focused docstrings
+6. Implement proper error handling with scenario-referenced messages
+7. Follow {framework} best practices while prioritizing behavior clarity
+8. Make code {optimization_level} but never at the expense of scenario completeness
+
+WARNING: Incomplete implementations will be heavily penalized in quality analysis and require immediate refinement. Every scenario must be fully demonstrable through the code.
+
+CRITICAL FILE AND IMPORT REQUIREMENTS:
+1. The main_module will be saved as "SERVICE_NAME.py" - structure your code accordingly
+2. Tests must import from the actual service name, NOT from "main_module" or "main"
+3. Use relative imports appropriate for the final file structure
+4. Include proper __main__ guard and startup code in main_module
+5. Ensure all imports in test_module work with the actual file names that will be created
+
+IMPORTANT: The test_module must import from the service name, not generic names like "main" or "main_module". For example, if service_name is "data_service", tests should import "from data_service import app".
 
 Return implementation in this JSON format:
 {{
-  "main_module": "COMPLETE EXECUTABLE PYTHON CODE with scenario comments",
-  "test_module": "SCENARIO-BASED TESTS that read like documentation",
+  "main_module": "COMPLETE EXECUTABLE PYTHON CODE with proper imports and structure",
+  "test_module": "SCENARIO-BASED TESTS with CORRECT IMPORTS from service_name",
   "dependencies": ["packages chosen to best implement behaviors"],
-  "service_name": "descriptive name reflecting primary scenarios",
+  "service_name": "snake_case_name_for_python_file",
   "scenario_mappings": {{
     "scenario_name": "primary_function_implementing_it"
   }},
   "behavioral_contracts": ["key interfaces that enforce scenarios"],
   "observability_points": ["where behavior is logged/monitored"],
   "api_endpoints": ["endpoint": "which scenario it serves"],
-  "architecture_rationale": "why this design best serves the scenarios"
+  "architecture_rationale": "why this design best serves the scenarios",
+  "import_verification": "confirm test imports match service_name"
 }}
 
-Remember: Generate code that a new developer could understand by reading scenarios first, then seeing how code implements them. The test suite should read like executable documentation of the scenarios.
+COMPLETENESS VERIFICATION:
+Every scenario must be completely implementable by the generated code. No placeholders, no NotImplemented returns, no TODO comments in core logic. If a scenario cannot be fully implemented in the first pass, provide a working simplified implementation that can be enhanced later.
+
+Remember: Generate code that a new developer could understand by reading scenarios first, then seeing how code implements them. The test suite should read like executable documentation of the scenarios. Code that doesn't fully implement scenarios violates the SDD contract that "behavior is sacred."
 """
 
     def _build_refinement_prompt(self,
@@ -789,7 +817,8 @@ Remember: Generate code that a new developer could understand by reading scenari
                                quality_issues: List[Dict[str, Any]],
                                refactoring_suggestions: List[Dict[str, Any]],
                                target_quality_score: int,
-                               preserve_functionality: bool) -> str:
+                               preserve_functionality: bool,
+                               completeness_analysis: Dict[str, Any] = None) -> str:
         """Build prompt for implementation refinement using SDD principles."""
         
         return f"""
@@ -805,6 +834,9 @@ BEHAVIORAL TESTS:
 {current_tests}
 ```
 
+🚨 INCOMPLETE IMPLEMENTATIONS (CRITICAL - MUST FIX FIRST):
+{self._format_completeness_issues(completeness_analysis) if completeness_analysis else "Implementation appears complete"}
+
 BEHAVIORAL VIOLATIONS (highest priority):
 {json.dumps(test_failures, indent=2) if test_failures else "All scenarios currently satisfied"}
 
@@ -819,14 +851,23 @@ REFINEMENT GOALS:
 - Code Quality Target: {target_quality_score}/100
 - Scenario Clarity: How obviously code maps to scenarios
 
-SDD REFINEMENT PRIORITIES:
-1. Fix any behavioral violations (failed scenario tests) 
-2. Improve scenario-to-code mapping clarity
-3. Enhance observability of business behavior
-4. Simplify complex code that obscures behavior
-5. Add missing edge cases discovered through testing
-6. Improve error messages to reference scenarios
-7. Strengthen behavioral contracts and interfaces
+SDD REFINEMENT PRIORITIES (in strict order):
+🚨 CRITICAL PRIORITY 1: COMPLETE ALL INCOMPLETE IMPLEMENTATIONS
+   - Replace every NotImplemented return with working code
+   - Remove all TODO comments in core logic and implement the functionality
+   - Convert all pass statements in business logic to actual implementations
+   - Ensure every function body contains real, executable logic
+   - Every scenario must be demonstrably implementable by running the code
+
+⚠️  HIGH PRIORITY 2: Fix any behavioral violations (failed scenario tests)
+3. Improve scenario-to-code mapping clarity
+4. Enhance observability of business behavior
+5. Simplify complex code that obscures behavior
+6. Add missing edge cases discovered through testing
+7. Improve error messages to reference scenarios
+8. Strengthen behavioral contracts and interfaces
+
+WARNING: Incomplete implementations violate the SDD contract that "behavior is sacred" and will result in severe quality penalties. No refinement can be considered successful while placeholders remain.
 
 REFINEMENT PRINCIPLES:
 - Each issue represents a gap between specified and actual behavior
@@ -843,17 +884,25 @@ CRITICAL STANDARDS:
 3. Enhance scenario traceability in code structure
 4. Improve business-focused error messages and logging
 5. Strengthen the mapping between scenarios and implementation
+6. FIX ANY IMPORT ISSUES: Ensure test imports reference correct module names
+
+IMPORT CORRECTION REQUIREMENTS:
+- If tests are importing from "main_module", "main", or other generic names, correct them
+- Tests must import from the actual service/module name that will be saved as the filename
+- Verify that all imports in test_module work with the generated file structure
+- Use proper Python import conventions for the target deployment structure
 
 Return refined system in JSON format:
 {{
   "main_module": "COMPLETE EXECUTABLE PYTHON CODE with clearer behavior mapping",
-  "test_module": "ENHANCED TESTS with better scenario coverage",
+  "test_module": "ENHANCED TESTS with CORRECTED IMPORTS and better scenario coverage",
   "dependencies": ["updated if architectural changes require"],
   "behavioral_fixes": ["how each test failure was resolved"],
   "clarity_improvements": ["how scenario mapping was made clearer"],
   "edge_cases_added": ["new scenarios discovered and handled"],
   "observability_enhancements": ["better behavior monitoring added"],
   "scenario_mappings": {{"scenario": "implementing_function"}},
+  "import_corrections": ["any import fixes applied to make tests executable"],
   "quality_score_justification": "why the code now meets quality targets"
 }}
 
@@ -886,12 +935,36 @@ Remember: In SDD, code quality means "how clearly does this implement the specif
             
             test_module = data.get("test_module", "")
             if include_tests and (not test_module or test_module in ["test_module.py", "test_module", "# No tests generated"]):
-                test_module = self._generate_fallback_tests(main_module)
+                # Get service_name early for fallback test generation
+                temp_service_name = data.get("service_name", "generated_service")
+                if temp_service_name:
+                    import re
+                    temp_service_name = re.sub(r'[^a-zA-Z0-9_]', '_', temp_service_name.lower())
+                    temp_service_name = re.sub(r'_+', '_', temp_service_name).strip('_')
+                    if temp_service_name and temp_service_name[0].isdigit():
+                        temp_service_name = f"service_{temp_service_name}"
+                    if not temp_service_name:
+                        temp_service_name = "generated_service"
+                test_module = self._generate_fallback_tests(main_module, temp_service_name)
+            
+            # Clean up service_name to be a valid Python module name
+            service_name = data.get("service_name", "generated_service")
+            if service_name:
+                import re
+                # Convert to snake_case and ensure it's a valid Python identifier
+                service_name = re.sub(r'[^a-zA-Z0-9_]', '_', service_name.lower())
+                service_name = re.sub(r'_+', '_', service_name).strip('_')
+                # Ensure it doesn't start with a number
+                if service_name and service_name[0].isdigit():
+                    service_name = f"service_{service_name}"
+                # Fallback if empty
+                if not service_name:
+                    service_name = "generated_service"
             
             implementation = {
                 "main_module": main_module,
                 "dependencies": data.get("dependencies", ["pytest"]),
-                "service_name": data.get("service_name", "generated_service"),
+                "service_name": service_name,
                 "module_name": data.get("module_name", "main"),
                 "key_classes": data.get("key_classes", []),
                 "key_functions": data.get("key_functions", [])
@@ -902,6 +975,17 @@ Remember: In SDD, code quality means "how clearly does this implement the specif
 
             if "api_endpoints" in data:
                 implementation["api_endpoints"] = data["api_endpoints"]
+
+            # Analyze implementation completeness
+            completeness_analysis = self._analyze_implementation_completeness(implementation)
+            implementation["completeness_analysis"] = completeness_analysis
+            
+            # Log completeness issues if any
+            if completeness_analysis["issues"]:
+                self.logger.warning(f"Implementation completeness issues detected: {len(completeness_analysis['issues'])} issues, "
+                                  f"completeness score: {completeness_analysis['completeness_percentage']}%")
+                for issue in completeness_analysis["critical_issues"]:
+                    self.logger.warning(f"Critical issue: {issue['description']} ({issue['count']} occurrences)")
 
             return implementation
 
@@ -948,6 +1032,138 @@ Remember: In SDD, code quality means "how clearly does this implement the specif
                 "constraint_compliance": {},
                 "performance_notes": "Optimization failed"
             }
+
+    def _format_completeness_issues(self, completeness_analysis: Dict[str, Any]) -> str:
+        """Format completeness issues for display in refinement prompt."""
+        if not completeness_analysis or not completeness_analysis.get("issues"):
+            return "✅ Implementation appears complete - no placeholders detected"
+        
+        issues = completeness_analysis["issues"]
+        completeness_percentage = completeness_analysis["completeness_percentage"]
+        severity_score = completeness_analysis["severity_score"]
+        
+        formatted = f"⚠️ COMPLETENESS SCORE: {completeness_percentage}% (severity: {severity_score})\n\n"
+        
+        # Group issues by type
+        critical_issues = []
+        other_issues = []
+        
+        for issue in issues:
+            if issue["severity"] >= 40:
+                critical_issues.append(issue)
+            else:
+                other_issues.append(issue)
+        
+        if critical_issues:
+            formatted += "🚨 CRITICAL INCOMPLETE IMPLEMENTATIONS (fix immediately):\n"
+            for issue in critical_issues:
+                formatted += f"   • {issue['description']}: {issue['count']} occurrences (severity: {issue['severity']})\n"
+                formatted += f"     Pattern: '{issue['pattern']}' in {issue['location']}\n"
+        
+        if other_issues:
+            formatted += "\n⚠️ Other completeness issues:\n"
+            for issue in other_issues:
+                formatted += f"   • {issue['description']}: {issue['count']} occurrences\n"
+        
+        formatted += f"\n📋 REQUIRED ACTIONS:\n"
+        formatted += "   1. Find every NotImplemented return and replace with working code\n"
+        formatted += "   2. Find every TODO comment in business logic and implement the functionality\n"
+        formatted += "   3. Find every 'pass' statement in functions and add real implementation\n"
+        formatted += "   4. Ensure every scenario can be demonstrated by running the code\n"
+        formatted += "   5. Test that all functionality works as specified in scenarios\n"
+        
+        return formatted
+
+    def _analyze_implementation_completeness(self, implementation: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze implementation for completeness issues like NotImplemented, TODO, etc."""
+        
+        main_module = implementation.get("main_module", "")
+        test_module = implementation.get("test_module", "")
+        
+        completeness_issues = []
+        severity_score = 0  # Higher score = more severe issues
+        
+        # Patterns that indicate incomplete implementation
+        incomplete_patterns = [
+            ("NotImplemented", "NotImplemented returns", 50),
+            ("raise NotImplementedError", "NotImplementedError exceptions", 50),
+            ("TODO:", "TODO comments in logic", 30),
+            ("FIXME:", "FIXME comments", 25),
+            ("# TODO", "TODO comments", 30),
+            ("# FIXME", "FIXME comments", 25),
+            ("pass  # ", "Pass statements with placeholder comments", 40),
+            ("...", "Ellipsis placeholders", 35),
+            ("# Placeholder", "Placeholder comments", 20),
+            ("# Not implemented", "Not implemented comments", 45),
+            ("def.*pass$", "Functions with only pass statements", 30),
+        ]
+        
+        import re
+        
+        # Check main module
+        for pattern, description, weight in incomplete_patterns:
+            if pattern.startswith("def.*"):
+                # Special handling for function definitions with only pass
+                matches = re.findall(pattern, main_module, re.MULTILINE)
+            else:
+                # Simple string matching for most patterns
+                matches = main_module.count(pattern)
+            
+            if matches:
+                issue = {
+                    "type": "incomplete_implementation",
+                    "pattern": pattern,
+                    "description": description,
+                    "count": len(matches) if isinstance(matches, list) else matches,
+                    "severity": weight,
+                    "location": "main_module"
+                }
+                completeness_issues.append(issue)
+                severity_score += weight * (len(matches) if isinstance(matches, list) else matches)
+        
+        # Check test module for incomplete tests
+        if test_module:
+            test_incomplete_patterns = [
+                ("assert True  # ", "Placeholder test assertions", 25),
+                ("# TODO", "TODO in tests", 20),
+                ("pass  # ", "Pass statements in tests", 30),
+            ]
+            
+            for pattern, description, weight in test_incomplete_patterns:
+                matches = test_module.count(pattern)
+                if matches:
+                    issue = {
+                        "type": "incomplete_test",
+                        "pattern": pattern,
+                        "description": description,
+                        "count": matches,
+                        "severity": weight,
+                        "location": "test_module"
+                    }
+                    completeness_issues.append(issue)
+                    severity_score += weight * matches
+        
+        # Check for empty or minimal implementations
+        if len(main_module.strip()) < 100:
+            completeness_issues.append({
+                "type": "minimal_implementation",
+                "description": "Implementation is too short to be functional",
+                "severity": 60,
+                "location": "main_module"
+            })
+            severity_score += 60
+        
+        # Calculate completeness percentage (0-100, where 100 is complete)
+        max_penalty = 500  # Adjust based on how severe we want to be
+        completeness_percentage = max(0, 100 - min(severity_score, max_penalty))
+        
+        return {
+            "completeness_percentage": completeness_percentage,
+            "severity_score": severity_score,
+            "issues": completeness_issues,
+            "requires_refinement": severity_score > 50,  # Threshold for requiring refinement
+            "critical_issues": [issue for issue in completeness_issues if issue["severity"] >= 40]
+        }
 
     async def _fallback_implementation_generation(self,
                                                 scenarios: List[Dict[str, Any]],
@@ -1216,11 +1432,13 @@ setup(
             # Generic service scenarios
             return self._generate_service_implementation(scenarios)
     
-    def _generate_fallback_tests(self, main_module: str) -> str:
-        """Generate basic tests for the main module."""
+    def _generate_fallback_tests(self, main_module: str, service_name: str = None) -> str:
+        """Generate basic tests for the main module with correct imports."""
         # Extract class names from the main module
         classes = []
         functions = []
+        module_name = service_name or "main"  # Use service_name if provided
+        
         try:
             tree = ast.parse(main_module)
             for node in ast.walk(tree):
@@ -1242,7 +1460,7 @@ setup(
         # Generate basic tests
         test_code = "import pytest\n"
         if classes:
-            test_code += f"from main import {', '.join(classes)}\n\n"
+            test_code += f"from {module_name} import {', '.join(classes)}\n\n"
         
         for class_name in classes:
             test_code += f"""
