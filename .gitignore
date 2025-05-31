@@ -7,3 +7,5 @@ __pycache__/
 *.py[cod]
 
 workspaces/
+
+interactive_builder/frontend/node_modules
