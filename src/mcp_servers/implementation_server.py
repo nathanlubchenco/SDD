@@ -24,9 +24,10 @@ class ImplementationMCPServer(BaseMCPServer):
     and managing the iterative development process.
     """
 
-    def __init__(self, workspace_dir: Optional[Path] = None, show_prompts: bool = False):
+    def __init__(self, workspace_dir: Optional[Path] = None, show_prompts: bool = False, api_docs_server=None):
         super().__init__("implementation-server", "1.0.0", show_prompts=show_prompts)
         self.workspace_dir = workspace_dir or Path("workspaces")
+        self.api_docs_server = api_docs_server
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         self.active_workspaces = {}
 
@@ -218,9 +219,12 @@ class ImplementationMCPServer(BaseMCPServer):
             self.logger.warning("AI client not available, using enhanced fallback")
             return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
 
+        # Query API documentation to enhance implementation quality
+        api_docs_context = await self._gather_api_documentation(target_framework, scenarios)
+
         # Build comprehensive prompt for implementation generation
         prompt = self._build_implementation_prompt(
-            scenarios, constraints, target_framework, optimization_level
+            scenarios, constraints, target_framework, optimization_level, api_docs_context
         )
 
         try:
@@ -540,11 +544,163 @@ Return optimized code in JSON format:
 
     # Helper methods for prompt building and response parsing
 
+    async def _gather_api_documentation(self, framework: str, scenarios: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Gather relevant API documentation to enhance code generation."""
+        
+        if not self.api_docs_server:
+            self.logger.warning("No API docs server available for documentation gathering")
+            return {"framework_docs": "No API docs server available", "examples": [], "best_practices": {}}
+        
+        try:
+            # Analyze scenarios to determine what documentation we need
+            use_cases = []
+            for scenario in scenarios:
+                when_action = scenario.get('when', '')
+                then_result = scenario.get('then', '')
+                if when_action and then_result:
+                    use_cases.append(f"{when_action} -> {then_result}")
+            
+            use_case_context = f"{framework} " + " and ".join(use_cases[:3])  # Limit context
+            
+            self.logger.info(f"Gathering API documentation for framework: {framework}")
+            self.logger.info(f"Use case context: {use_case_context}")
+            
+            # Get framework documentation
+            framework_request = {
+                "method": "tools/call",
+                "params": {
+                    "name": "get_api_reference",
+                    "arguments": {
+                        "library": framework,
+                        "include_examples": True
+                    }
+                }
+            }
+            
+            self.logger.info(f"📚 API Docs Request - Framework Reference: {framework_request}")
+            framework_response = await self.api_docs_server.handle_mcp_request(framework_request)
+            self.logger.info(f"📚 API Docs Response - Framework: {framework_response}")
+            framework_docs = self._extract_mcp_content(framework_response)
+            self.logger.info(f"📚 Extracted Framework Docs: {type(framework_docs)} - {str(framework_docs)[:200]}...")
+            
+            # Find code examples for the use case
+            examples_request = {
+                "method": "tools/call", 
+                "params": {
+                    "name": "find_code_examples",
+                    "arguments": {
+                        "use_case": use_case_context,
+                        "complexity": "intermediate"
+                    }
+                }
+            }
+            
+            self.logger.info(f"📚 API Docs Request - Code Examples: {examples_request}")
+            examples_response = await self.api_docs_server.handle_mcp_request(examples_request)
+            self.logger.info(f"📚 API Docs Response - Examples: {examples_response}")
+            examples = self._extract_mcp_content(examples_response)
+            self.logger.info(f"📚 Extracted Examples: {type(examples)} - {str(examples)[:200]}...")
+            
+            # Get best practices
+            practices_request = {
+                "method": "tools/call",
+                "params": {
+                    "name": "check_best_practices", 
+                    "arguments": {
+                        "technology": framework,
+                        "focus_area": "general"
+                    }
+                }
+            }
+            
+            self.logger.info(f"📚 API Docs Request - Best Practices: {practices_request}")
+            practices_response = await self.api_docs_server.handle_mcp_request(practices_request)
+            self.logger.info(f"📚 API Docs Response - Practices: {practices_response}")
+            best_practices = self._extract_mcp_content(practices_response)
+            self.logger.info(f"📚 Extracted Best Practices: {type(best_practices)} - {str(best_practices)[:200]}...")
+            
+            final_result = {
+                "framework_docs": framework_docs,
+                "examples": examples,
+                "best_practices": best_practices,
+                "enhanced": True
+            }
+            
+            self.logger.info(f"📚 Final API Documentation Context Summary:")
+            self.logger.info(f"   - Framework docs: {type(framework_docs)} ({len(str(framework_docs))} chars)")
+            self.logger.info(f"   - Examples: {type(examples)} ({len(str(examples))} chars)")
+            self.logger.info(f"   - Best practices: {type(best_practices)} ({len(str(best_practices))} chars)")
+            
+            return final_result
+            
+        except Exception as e:
+            self.logger.error(f"Failed to gather API documentation: {e}", exc_info=True)
+            return {"framework_docs": "Documentation gathering failed", "examples": [], "best_practices": {}}
+
+    def _extract_mcp_content(self, response: Dict[str, Any]) -> Any:
+        """Extract content from MCP response format."""
+        try:
+            content = response.get("result", {}).get("content", [])
+            if isinstance(content, list) and content:
+                if isinstance(content[0], dict) and "text" in content[0]:
+                    text = content[0]["text"]
+                    try:
+                        return json.loads(text)
+                    except json.JSONDecodeError:
+                        return text
+                return content[0]
+            return content
+        except Exception:
+            return "Content extraction failed"
+
+    def _format_api_docs_for_prompt(self, api_docs_context: Dict[str, Any]) -> str:
+        """Format API documentation context for inclusion in prompts."""
+        
+        formatted_sections = []
+        
+        # Framework documentation
+        framework_docs = api_docs_context.get("framework_docs", {})
+        if isinstance(framework_docs, dict) and framework_docs:
+            formatted_sections.append(f"Framework Reference: {json.dumps(framework_docs, indent=2)}")
+        elif isinstance(framework_docs, str) and framework_docs:
+            formatted_sections.append(f"Framework Info: {framework_docs}")
+        
+        # Code examples
+        examples = api_docs_context.get("examples", [])
+        if examples:
+            formatted_sections.append("Code Examples:")
+            if isinstance(examples, list):
+                for i, example in enumerate(examples[:2]):  # Limit to 2 examples
+                    if isinstance(example, dict):
+                        title = example.get("title", f"Example {i+1}")
+                        code = example.get("code", "")
+                        formatted_sections.append(f"  {title}: {code[:200]}...")
+                    else:
+                        formatted_sections.append(f"  Example {i+1}: {str(example)[:200]}...")
+            else:
+                formatted_sections.append(f"  {str(examples)[:300]}...")
+        
+        # Best practices
+        best_practices = api_docs_context.get("best_practices", {})
+        if isinstance(best_practices, dict) and best_practices:
+            practices = best_practices.get("best_practices", [])
+            if practices:
+                formatted_sections.append("Best Practices:")
+                for practice in practices[:3]:  # Limit to 3 practices
+                    if isinstance(practice, dict):
+                        practice_text = practice.get("practice", "")
+                        formatted_sections.append(f"  - {practice_text}")
+                    else:
+                        formatted_sections.append(f"  - {str(practice)}")
+        
+        return "\n".join(formatted_sections) if formatted_sections else "No additional API context available"
+
     def _build_implementation_prompt(self,
                                    scenarios: List[Dict[str, Any]],
                                    constraints: Dict[str, Any],
                                    framework: str,
-                                   optimization_level: str) -> str:
+                                   optimization_level: str,
+                                   api_docs_context: Dict[str, Any] = {}) -> str:
         """Build comprehensive prompt for implementation generation."""
         
         scenarios_text = "\n".join([
@@ -554,6 +710,15 @@ Return optimized code in JSON format:
             f"Then: {s.get('then', '')}\n"
             for s in scenarios
         ])
+
+        # Include API documentation context if available
+        api_context_section = ""
+        if api_docs_context.get("enhanced"):
+            api_context_section = f"""
+API DOCUMENTATION CONTEXT:
+{self._format_api_docs_for_prompt(api_docs_context)}
+
+"""
 
         return f"""
 You are an expert Python developer. Generate a complete, WORKING Python implementation based on these specifications.
@@ -569,7 +734,7 @@ CONSTRAINTS:
 FRAMEWORK: {framework}
 OPTIMIZATION LEVEL: {optimization_level}
 
-MANDATORY REQUIREMENTS:
+{api_context_section}MANDATORY REQUIREMENTS:
 1. The "main_module" field MUST contain complete, executable Python code (classes, functions, imports)
 2. The "test_module" field MUST contain complete, runnable pytest test code
 3. NO placeholders like "main_module.py", "implementation code here", or "# TODO"

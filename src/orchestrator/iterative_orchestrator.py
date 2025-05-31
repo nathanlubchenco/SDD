@@ -16,6 +16,7 @@ from src.mcp_servers.implementation_server import ImplementationMCPServer
 from src.mcp_servers.testing_mcp_server import TestingMCPServer
 from src.mcp_servers.analysis_mcp_server import AnalysisMCPServer
 from src.mcp_servers.docker_mcp_server import DockerMCPServer
+from src.mcp_servers.api_docs_mcp_server import APIDocsMCPServer
 from src.core.sdd_logger import get_logger
 
 
@@ -40,7 +41,8 @@ class IterativeOrchestrator:
         
         # Initialize MCP servers
         self.spec_server = SpecificationMCPServer(Path("specs"), show_prompts=show_prompts)
-        self.impl_server = ImplementationMCPServer(show_prompts=show_prompts)
+        self.api_docs_server = APIDocsMCPServer(show_prompts=show_prompts)
+        self.impl_server = ImplementationMCPServer(show_prompts=show_prompts, api_docs_server=self.api_docs_server)
         self.test_server = TestingMCPServer(show_prompts=show_prompts)
         self.analysis_server = AnalysisMCPServer(show_prompts=show_prompts)
         self.docker_server = DockerMCPServer(show_prompts=show_prompts)
