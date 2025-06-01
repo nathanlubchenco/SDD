@@ -240,6 +240,14 @@ class ImplementationMCPServer(BaseMCPServer):
             
             self._log_prompt("generate_implementation", prompt, response)
 
+            # DEBUG: Log the raw response for o3 debugging
+            if "o3" in getattr(self.ai_client, 'current_model', ''):
+                self.logger.info(f"🧠 o3 Raw Response Length: {len(response)} characters")
+                self.logger.info(f"🧠 o3 Response Preview (first 500 chars): {response[:500]}")
+                self.logger.info(f"🧠 o3 Response Preview (last 200 chars): {response[-200:]}")
+                if "Basic CRUD" in response:
+                    self.logger.error("🚨 o3 model returned CRUD template directly - AI prompt issue!")
+
             implementation = self._parse_implementation_response(response, include_tests)
             
             # Add metadata
@@ -921,87 +929,337 @@ Remember: In SDD, code quality means "how clearly does this implement the specif
 
     def _parse_implementation_response(self, response: str, include_tests: bool = True) -> Dict[str, Any]:
         """Parse AI response into implementation structure."""
+        
+        # Enhanced debugging for o3 model responses
+        self.logger.info(f"🔍 Parsing AI response (length: {len(response)} chars)")
+        self.logger.info(f"🔍 Response preview: {response[:300]}...")
+        
+        # Detect if this might be an o3 reasoning model response
+        is_reasoning_response = self._is_reasoning_model_response(response)
+        if is_reasoning_response:
+            self.logger.info("🧠 Detected reasoning model response pattern - using enhanced parsing")
+        
         try:
-            # Extract JSON from response
+            # Extract JSON from response with improved parsing for o3 models
+            json_text = None
+            
+            # Method 1: Look for ```json code blocks
             if "```json" in response:
                 start = response.find("```json") + 7
                 end = response.find("```", start)
                 json_text = response[start:end].strip()
+                self.logger.info("🔍 Found JSON in code block")
+            
+            # Method 2: Look for JSON object boundaries
             elif "{" in response and "}" in response:
-                # Try to find JSON-like content in the response
                 start = response.find("{")
                 end = response.rfind("}") + 1
                 json_text = response[start:end].strip()
+                self.logger.info("🔍 Found JSON by braces")
+            
+            # Method 3: Try the entire response (for pure JSON responses)
             else:
                 json_text = response.strip()
-
+                self.logger.info("🔍 Using entire response as JSON")
+            
+            # Log the extracted JSON for debugging
+            self.logger.info(f"🔍 Extracted JSON text (length: {len(json_text)}): {json_text[:200]}...")
+            
+            # Apply o3/reasoning model specific fixes if needed
+            if self._is_reasoning_model_response(response):
+                self.logger.info("🧠 Applying o3/reasoning model JSON fixes...")
+                json_text = self._fix_reasoning_model_json(json_text)
+            
+            # Attempt to parse JSON
             data = json.loads(json_text)
+            self.logger.info(f"✅ Successfully parsed JSON with keys: {list(data.keys())}")
             
-            # Ensure required fields and validate that we have actual code, not placeholders
-            main_module = data.get("main_module", "")
-            if not main_module or main_module in ["main_module.py", "main_module", "# No implementation generated"]:
-                self.logger.warning("AI generated placeholder content instead of actual code")
-                main_module = self._generate_fallback_code_from_scenarios(data.get("scenarios", []))
-            
-            test_module = data.get("test_module", "")
-            if include_tests and (not test_module or test_module in ["test_module.py", "test_module", "# No tests generated"]):
-                # Get service_name early for fallback test generation
-                temp_service_name = data.get("service_name", "generated_service")
-                if temp_service_name:
-                    import re
-                    temp_service_name = re.sub(r'[^a-zA-Z0-9_]', '_', temp_service_name.lower())
-                    temp_service_name = re.sub(r'_+', '_', temp_service_name).strip('_')
-                    if temp_service_name and temp_service_name[0].isdigit():
-                        temp_service_name = f"service_{temp_service_name}"
-                    if not temp_service_name:
-                        temp_service_name = "generated_service"
-                test_module = self._generate_fallback_tests(main_module, temp_service_name)
-            
-            # Clean up service_name to be a valid Python module name
-            service_name = data.get("service_name", "generated_service")
-            if service_name:
-                import re
-                # Convert to snake_case and ensure it's a valid Python identifier
-                service_name = re.sub(r'[^a-zA-Z0-9_]', '_', service_name.lower())
-                service_name = re.sub(r'_+', '_', service_name).strip('_')
-                # Ensure it doesn't start with a number
-                if service_name and service_name[0].isdigit():
-                    service_name = f"service_{service_name}"
-                # Fallback if empty
-                if not service_name:
-                    service_name = "generated_service"
-            
-            implementation = {
-                "main_module": main_module,
-                "dependencies": data.get("dependencies", ["pytest"]),
-                "service_name": service_name,
-                "module_name": data.get("module_name", "main"),
-                "key_classes": data.get("key_classes", []),
-                "key_functions": data.get("key_functions", [])
-            }
-
-            if include_tests:
-                implementation["test_module"] = test_module
-
-            if "api_endpoints" in data:
-                implementation["api_endpoints"] = data["api_endpoints"]
-
-            # Analyze implementation completeness
-            completeness_analysis = self._analyze_implementation_completeness(implementation)
-            implementation["completeness_analysis"] = completeness_analysis
-            
-            # Log completeness issues if any
-            if completeness_analysis["issues"]:
-                self.logger.warning(f"Implementation completeness issues detected: {len(completeness_analysis['issues'])} issues, "
-                                  f"completeness score: {completeness_analysis['completeness_percentage']}%")
-                for issue in completeness_analysis["critical_issues"]:
-                    self.logger.warning(f"Critical issue: {issue['description']} ({issue['count']} occurrences)")
-
-            return implementation
+            # Process the parsed data using shared logic
+            return self._process_parsed_data(data, include_tests)
 
         except (json.JSONDecodeError, KeyError) as e:
-            self.logger.warning(f"Failed to parse implementation response: {e}. Response: {response[:200]}...")
+            # Enhanced error logging for o3 debugging
+            self.logger.error(f"🚨 JSON PARSING FAILED for implementation response")
+            self.logger.error(f"🚨 Error type: {type(e).__name__}")
+            self.logger.error(f"🚨 Error message: {str(e)}")
+            self.logger.error(f"🚨 Extracted JSON text: {json_text[:500] if 'json_text' in locals() else 'No json_text extracted'}")
+            self.logger.error(f"🚨 Full response (first 1000 chars): {response[:1000]}")
+            self.logger.error(f"🚨 Full response (last 500 chars): {response[-500:]}")
+            
+            # Try alternative parsing strategies for o3 models
+            self.logger.info("🔧 Attempting alternative parsing strategies...")
+            
+            # Strategy 1: Look for multiple JSON blocks (o3 might provide reasoning + JSON)
+            import re
+            
+            # Improved regex pattern for nested JSON objects
+            json_blocks = []
+            
+            # Try to find complete JSON objects with balanced braces
+            brace_stack = []
+            start_idx = None
+            for i, char in enumerate(response):
+                if char == '{':
+                    if not brace_stack:
+                        start_idx = i
+                    brace_stack.append(char)
+                elif char == '}' and brace_stack:
+                    brace_stack.pop()
+                    if not brace_stack and start_idx is not None:
+                        json_candidate = response[start_idx:i+1]
+                        json_blocks.append(json_candidate)
+                        start_idx = None
+            
+            if json_blocks:
+                self.logger.info(f"🔧 Found {len(json_blocks)} potential JSON blocks using brace matching")
+                for i, block in enumerate(json_blocks):
+                    try:
+                        data = json.loads(block)
+                        if isinstance(data, dict) and ("main_module" in data or "implementation" in data or len(data) > 2):
+                            self.logger.info(f"✅ Successfully parsed JSON block {i+1} with keys: {list(data.keys())}")
+                            return self._process_parsed_data(data, include_tests)
+                    except json.JSONDecodeError as je:
+                        self.logger.debug(f"JSON block {i+1} parse failed: {je}")
+                        continue
+            
+            # Strategy 2: Look for code blocks and try to construct JSON
+            code_blocks = re.findall(r'```(?:python|py)?\n?(.*?)\n?```', response, re.DOTALL)
+            if code_blocks:
+                self.logger.info(f"🔧 Found {len(code_blocks)} code blocks, attempting reconstruction")
+                
+                # Identify main module and test module by content
+                main_code = ""
+                test_code = ""
+                
+                for block in code_blocks:
+                    block_content = block.strip()
+                    if not block_content:
+                        continue
+                        
+                    # Check if this looks like a test file
+                    if ("import pytest" in block_content or 
+                        "def test_" in block_content or 
+                        "class Test" in block_content):
+                        if not test_code:  # Take the first test block
+                            test_code = block_content
+                            self.logger.info("🔧 Identified test code block")
+                    else:
+                        # Assume it's main code if not test code
+                        if not main_code:  # Take the first main code block
+                            main_code = block_content
+                            self.logger.info("🔧 Identified main code block")
+                
+                if main_code:
+                    # Extract service name from the response or generate one
+                    service_name = "cli_usage_analyzer"  # Default for the current use case
+                    
+                    # Try to extract service name from response text
+                    service_match = re.search(r'service_name["\']?\s*:\s*["\']?([a-zA-Z_][a-zA-Z0-9_]*)', response)
+                    if service_match:
+                        service_name = service_match.group(1)
+                        self.logger.info(f"🔧 Extracted service name: {service_name}")
+                    
+                    reconstructed_impl = {
+                        "main_module": main_code,
+                        "test_module": test_code,
+                        "dependencies": ["pytest", "argparse"],  # Common dependencies
+                        "service_name": service_name,
+                        "module_name": "main",
+                        "key_classes": self._extract_class_names(main_code),
+                        "key_functions": self._extract_function_names(main_code)
+                    }
+                    self.logger.info(f"✅ Reconstructed implementation from code blocks: {service_name}")
+                    return self._process_parsed_data(reconstructed_impl, include_tests)
+            
+            # If all strategies fail, log and fallback
+            self.logger.error("🚨 ALL PARSING STRATEGIES FAILED - falling back to CRUD template")
+            self.logger.error("🚨 This indicates the o3 model response format is incompatible with current parsing logic")
+            
             return self._fallback_implementation_structure()
+
+    def _process_parsed_data(self, data: Dict[str, Any], include_tests: bool = True) -> Dict[str, Any]:
+        """Process successfully parsed data into implementation structure."""
+        # Ensure required fields and validate that we have actual code, not placeholders
+        main_module = data.get("main_module", "")
+        if not main_module or main_module in ["main_module.py", "main_module", "# No implementation generated"]:
+            self.logger.warning("AI generated placeholder content instead of actual code")
+            main_module = self._generate_fallback_code_from_scenarios(data.get("scenarios", []))
+        
+        test_module = data.get("test_module", "")
+        if include_tests and (not test_module or test_module in ["test_module.py", "test_module", "# No tests generated"]):
+            # Get service_name early for fallback test generation
+            temp_service_name = data.get("service_name", "generated_service")
+            if temp_service_name:
+                import re
+                temp_service_name = re.sub(r'[^a-zA-Z0-9_]', '_', temp_service_name.lower())
+                temp_service_name = re.sub(r'_+', '_', temp_service_name).strip('_')
+                if temp_service_name and temp_service_name[0].isdigit():
+                    temp_service_name = f"service_{temp_service_name}"
+                if not temp_service_name:
+                    temp_service_name = "generated_service"
+            test_module = self._generate_fallback_tests(main_module, temp_service_name)
+        
+        # Clean up service_name to be a valid Python module name
+        service_name = data.get("service_name", "generated_service")
+        if service_name:
+            import re
+            # Convert to snake_case and ensure it's a valid Python identifier
+            service_name = re.sub(r'[^a-zA-Z0-9_]', '_', service_name.lower())
+            service_name = re.sub(r'_+', '_', service_name).strip('_')
+            # Ensure it doesn't start with a number
+            if service_name and service_name[0].isdigit():
+                service_name = f"service_{service_name}"
+            # Fallback if empty
+            if not service_name:
+                service_name = "generated_service"
+        
+        implementation = {
+            "main_module": main_module,
+            "dependencies": data.get("dependencies", ["pytest"]),
+            "service_name": service_name,
+            "module_name": data.get("module_name", "main"),
+            "key_classes": data.get("key_classes", []),
+            "key_functions": data.get("key_functions", [])
+        }
+
+        if include_tests:
+            implementation["test_module"] = test_module
+
+        if "api_endpoints" in data:
+            implementation["api_endpoints"] = data["api_endpoints"]
+
+        # Analyze implementation completeness
+        completeness_analysis = self._analyze_implementation_completeness(implementation)
+        implementation["completeness_analysis"] = completeness_analysis
+        
+        # Log completeness issues if any
+        if completeness_analysis["issues"]:
+            self.logger.warning(f"Implementation completeness issues detected: {len(completeness_analysis['issues'])} issues, "
+                              f"completeness score: {completeness_analysis['completeness_percentage']}%")
+            for issue in completeness_analysis["critical_issues"]:
+                self.logger.warning(f"Critical issue: {issue['description']} ({issue['count']} occurrences)")
+
+        return implementation
+
+    def _is_reasoning_model_response(self, response: str) -> bool:
+        """Detect if response is from a reasoning model (o1, o3) based on patterns."""
+        reasoning_indicators = [
+            "thinking through",
+            "let me analyze",
+            "reasoning:",
+            "step by step",
+            "let me break this down",
+            "i need to think about",
+            "considering the requirements",
+            "looking at the specification",
+            "analyzing the scenarios"
+        ]
+        
+        response_lower = response.lower()
+        return any(indicator in response_lower for indicator in reasoning_indicators)
+
+    def _fix_reasoning_model_json(self, json_text: str) -> str:
+        """Fix common JSON issues in o3/reasoning model responses."""
+        try:
+            # Strategy 1: Fix unescaped newlines in JSON string values
+            # This is the main issue with o3 responses - they include literal newlines in JSON strings
+            import re
+            
+            # For o3 responses, we need a more sophisticated approach
+            # The issue is that multi-line Python code is embedded in JSON strings without proper escaping
+            
+            # Step 1: Find all string values in the JSON that contain actual newlines
+            lines = json_text.split('\n')
+            fixed_lines = []
+            in_string = False
+            current_quote = None
+            
+            for line in lines:
+                if not in_string:
+                    # Look for the start of a string value
+                    if '"main_module"' in line or '"test_module"' in line:
+                        # This line starts a multi-line string value
+                        quote_pos = line.find(': "')
+                        if quote_pos != -1:
+                            # Replace the opening quote and escape the content
+                            before_quote = line[:quote_pos + 3]  # includes ': "'
+                            after_quote = line[quote_pos + 3:]
+                            # Escape the content
+                            escaped_content = after_quote.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                            fixed_lines.append(before_quote + escaped_content)
+                            in_string = True
+                            current_quote = '"'
+                        else:
+                            fixed_lines.append(line)
+                    else:
+                        fixed_lines.append(line)
+                else:
+                    # We're inside a string value, escape this line and check for closing quote
+                    if line.strip().endswith('",') or line.strip().endswith('"'):
+                        # This is the end of the string
+                        escaped_line = line.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                        fixed_lines.append(escaped_line)
+                        in_string = False
+                        current_quote = None
+                    else:
+                        # Middle of multi-line string, escape and add \n
+                        escaped_line = line.replace('\\', '\\\\').replace('"', '\\"') + '\\n'
+                        fixed_lines.append(escaped_line)
+            
+            fixed_json = '\n'.join(fixed_lines)
+            
+            # Alternative approach: Use regex to fix the most common case
+            # Replace actual newlines inside JSON string values with \n
+            def fix_json_string(match):
+                full_match = match.group(0)
+                key = match.group(1)
+                value = match.group(2)
+                
+                # Escape the value properly
+                escaped_value = value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r', '\\r').replace('\t', '\\t')
+                return f'"{key}": "{escaped_value}"'
+            
+            # Pattern to match "key": "value with potential newlines"
+            pattern = r'"([^"]+)":\s*"([^"]*(?:\\.[^"]*)*)"'
+            fixed_json = re.sub(pattern, fix_json_string, fixed_json, flags=re.DOTALL)
+            
+            self.logger.info(f"🔧 Applied o3 JSON fixes - original: {len(json_text)} chars, fixed: {len(fixed_json)} chars")
+            
+            return fixed_json
+            
+        except Exception as e:
+            self.logger.warning(f"Failed to apply o3 JSON fixes: {e}")
+            return json_text
+
+    def _extract_class_names(self, code: str) -> List[str]:
+        """Extract class names from Python code."""
+        classes = []
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    classes.append(node.name)
+        except SyntaxError:
+            # Fallback to regex if AST parsing fails
+            import re
+            class_matches = re.findall(r'^class\s+([A-Za-z_][A-Za-z0-9_]*)', code, re.MULTILINE)
+            classes.extend(class_matches)
+        return classes
+
+    def _extract_function_names(self, code: str) -> List[str]:
+        """Extract function names from Python code."""
+        functions = []
+        try:
+            tree = ast.parse(code)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and not node.name.startswith('_'):
+                    functions.append(node.name)
+        except SyntaxError:
+            # Fallback to regex if AST parsing fails
+            import re
+            func_matches = re.findall(r'^def\s+([A-Za-z_][A-Za-z0-9_]*)', code, re.MULTILINE)
+            functions.extend([f for f in func_matches if not f.startswith('_')])
+        return functions
 
     def _parse_code_generation_response(self, response: str) -> Dict[str, Any]:
         """Parse code generation response."""

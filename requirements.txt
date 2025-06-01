@@ -1,5 +1,5 @@
 # Minimal development requirements
-openai>=1.0.0
+openai>=1.82.0  # Required for o3 model support with max_completion_tokens
 anthropic>=0.18.0
 pyyaml>=6.0
 pytest>=7.0.0

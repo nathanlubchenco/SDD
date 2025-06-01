@@ -63,14 +63,13 @@ def chat_completion(messages, model="gpt-4o", temperature=0.0, max_tokens=None):
         "messages": messages,
     }
     
-    # Handle o3 model parameter restrictions
+    # Handle o3 model parameter requirements
     if model and "o3" in model:
-        # o3 model has specific requirements: temperature=1, no max_tokens
+        # o3 model requires: temperature=1 (only supported value), max_completion_tokens (not max_tokens)
         params["temperature"] = 1
-        # o3 may use max_completion_tokens instead of max_tokens
         if max_tokens is not None:
             params["max_completion_tokens"] = max_tokens
-        print(f"🧠 Using o3 model with special parameters: temperature=1, max_completion_tokens={max_tokens}")
+        print(f"🧠 Using o3 model with required parameters: temperature=1, max_completion_tokens={max_tokens}")
     else:
         # Use provided temperature for other models
         params["temperature"] = temperature
