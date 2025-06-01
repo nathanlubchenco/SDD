@@ -49,7 +49,7 @@ class ScenarioPatterns:
         r"assume\s+(.+)",
         r"suppose\s+(.+)", 
         r"starting\s+with\s+(.+)",
-        r"with\s+(.+)\s+in\s+place",
+        r"with\s+(.+)",
         r"having\s+(.+)",
         r"when\s+(.+)\s+exists",
         r"if\s+(.+)\s+is\s+true",
@@ -132,34 +132,9 @@ class ScenarioBuilder:
     
     def _detect_scenario_blocks(self, text: str) -> List[str]:
         """Detect individual scenario blocks in text"""
-        # Split on scenario indicators
-        scenario_indicators = [
-            "scenario:", "test case:", "example:", 
-            "use case:", "story:", "requirement:"
-        ]
-        
-        blocks = [text]  # Start with full text
-        
-        for indicator in scenario_indicators:
-            new_blocks = []
-            for block in blocks:
-                parts = block.split(indicator)
-                if len(parts) > 1:
-                    new_blocks.extend([p.strip() for p in parts if p.strip()])
-                else:
-                    new_blocks.append(block)
-            blocks = new_blocks
-        
-        # Also split on paragraph breaks that might indicate new scenarios
-        final_blocks = []
-        for block in blocks:
-            paragraphs = [p.strip() for p in block.split('\n\n') if p.strip()]
-            if len(paragraphs) > 1:
-                final_blocks.extend(paragraphs)
-            else:
-                final_blocks.append(block)
-        
-        return final_blocks
+        # For now, treat the entire text as one scenario block
+        # This preserves Given/When/Then relationships within the same scenario
+        return [text.strip()]
     
     def _parse_scenario_block(self, block: str, entities: List[str], scenario_id: str) -> Optional[Scenario]:
         """Parse a text block into a structured scenario"""
@@ -212,8 +187,8 @@ class ScenarioBuilder:
     
     def _split_into_sentences(self, text: str) -> List[str]:
         """Split text into sentences for analysis"""
-        # Simple sentence splitting - could be enhanced with nltk
-        sentences = re.split(r'[.!?]+', text)
+        # Split on periods, exclamation marks, question marks, or newlines
+        sentences = re.split(r'[.!?\n]+', text)
         return [s.strip() for s in sentences if s.strip()]
     
     def _classify_sentence(self, sentence: str, entities: List[str]) -> Optional[ScenarioComponent]:

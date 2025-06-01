@@ -56,7 +56,7 @@ const initialConversationState: ConversationState = {
   progress_score: 0,
 };
 
-export const useConversationStore = create<ConversationStore>((set, get) => ({
+export const useConversationStore = create<ConversationStore>((set) => ({
   messages: [],
   conversationState: initialConversationState,
   suggestedActions: [],

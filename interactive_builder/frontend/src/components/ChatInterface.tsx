@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useConversationStore } from '@/store/conversationStore';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { cn } from '@/lib/utils';
-import { Send, Bot, User, Lightbulb } from 'lucide-react';
+import { Send, Bot, User } from 'lucide-react';
 import EntityHighlighter from './EntityHighlighter';
 import SuggestedActions from './SuggestedActions';
 

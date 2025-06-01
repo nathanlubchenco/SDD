@@ -27,7 +27,7 @@ interface SpecificationStore {
   syncFromConversationState: (entities: Entity[], scenarios: Scenario[], constraints: Constraint[]) => void;
 }
 
-export const useSpecificationStore = create<SpecificationStore>((set, get) => ({
+export const useSpecificationStore = create<SpecificationStore>((set) => ({
   entities: [],
   scenarios: [],
   constraints: [],

@@ -45,7 +45,7 @@ function App() {
           
           {/* Desktop tabs - only show on larger screens where we have multiple panels */}
           <nav className="hidden lg:flex items-center gap-1">
-            {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios'] : [])] as const).map((tab) => (
+            {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios' as const] : [])] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -117,7 +117,7 @@ function App() {
           {/* Mobile tabs */}
           <div className="border-b border-border bg-background">
             <nav className="flex overflow-x-auto">
-              {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios'] : [])] as const).map((tab) => (
+              {(['chat', 'visualization', 'preview', ...(showScenariosTab ? ['scenarios' as const] : [])] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}

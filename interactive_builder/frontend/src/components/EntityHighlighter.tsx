@@ -11,6 +11,8 @@ interface EntityHighlighterProps {
 
 const EntityHighlighter = ({ text, onChange, placeholder, disabled }: EntityHighlighterProps) => {
   const { conversationState } = useConversationStore();
+  // Use conversationState for entity context
+  const existingEntities = conversationState.discovered_entities || [];
   const [detectedEntities, setDetectedEntities] = useState<Array<{word: string, type: string, start: number, end: number}>>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
