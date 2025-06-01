@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useConversationStore } from '@/store/conversationStore';
 import { Network, GitBranch, Target, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { AdvancedVisualization } from './AdvancedVisualization';
 
 const VisualizationCanvas = () => {
   const { conversationState } = useConversationStore();
@@ -227,12 +228,9 @@ const VisualizationCanvas = () => {
               </div>
             )}
 
-            {/* Future: Interactive diagram will go here */}
-            <div className="mt-8 p-6 border border-dashed border-border rounded-lg">
-              <div className="text-center text-muted-foreground">
-                <Network className="w-8 h-8 mx-auto mb-2" />
-                <p className="text-sm">Interactive system diagram coming soon...</p>
-              </div>
+            {/* Advanced Interactive Visualization */}
+            <div className="mt-8">
+              <AdvancedVisualization />
             </div>
           </div>
         )}

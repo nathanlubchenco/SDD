@@ -13,6 +13,7 @@ from nlp_extractor import NLPExtractor, ExtractedEntity, ExtractedScenario, Extr
 from enhanced_nlp_extractor import EnhancedNLPExtractor, EnhancedEntity
 from contextual_followup_engine import ContextualFollowupEngine, FollowUpQuestion
 from scenario_builder import ScenarioBuilder
+from visualization_engine import VisualizationEngine
 
 class ConversationEngine:
     """
@@ -28,6 +29,7 @@ class ConversationEngine:
         self.enhanced_extractor = EnhancedNLPExtractor()
         self.followup_engine = ContextualFollowupEngine()
         self.scenario_builder = ScenarioBuilder()
+        self.visualization_engine = VisualizationEngine()
         self.conversation_history: List[Dict[str, str]] = []
         self.detected_domain = None
         
@@ -485,3 +487,91 @@ Total elements captured: {total_elements}
         """Reset conversation state"""
         self.state = ConversationState()
         self.conversation_history.clear()
+    
+    def generate_visualization(self, diagram_type: str = "auto") -> Dict[str, Any]:
+        """Generate visualization based on current conversation state"""
+        try:
+            # Convert state to format expected by visualization engine
+            entities = [
+                {
+                    'id': entity.id,
+                    'name': entity.name,
+                    'type': entity.type,
+                    'description': entity.description
+                }
+                for entity in self.state.discovered_entities
+            ]
+            
+            scenarios = [
+                {
+                    'id': scenario.id,
+                    'title': scenario.title,
+                    'given': scenario.given,
+                    'when': scenario.when,
+                    'then': scenario.then,
+                    'status': scenario.status,
+                    'entities': scenario.entities
+                }
+                for scenario in self.state.scenarios
+            ]
+            
+            constraints = [
+                {
+                    'id': constraint.id,
+                    'name': constraint.name,
+                    'category': constraint.category,
+                    'requirement': constraint.requirement,
+                    'priority': constraint.priority
+                }
+                for constraint in self.state.constraints
+            ]
+            
+            # Determine best diagram type based on current state
+            if diagram_type == "auto":
+                if len(scenarios) >= 2:
+                    diagram_type = "scenario_flow"
+                elif len(entities) >= 3:
+                    diagram_type = "entity_relationship"
+                elif len(entities) >= 1 and len(scenarios) >= 1:
+                    diagram_type = "architecture"
+                else:
+                    diagram_type = "entity_relationship"
+            
+            # Generate appropriate diagram
+            if diagram_type == "entity_relationship":
+                diagram = self.visualization_engine.generate_entity_relationship_diagram(entities)
+            elif diagram_type == "scenario_flow":
+                diagram = self.visualization_engine.generate_scenario_flow_diagram(scenarios, entities)
+            elif diagram_type == "architecture":
+                diagram = self.visualization_engine.generate_system_architecture_diagram(entities, scenarios, constraints)
+            else:
+                # Fallback to entity relationship
+                diagram = self.visualization_engine.generate_entity_relationship_diagram(entities)
+            
+            # Convert to dictionary for API response
+            result = self.visualization_engine.to_dict(diagram)
+            
+            # Add metadata about the generation
+            result['generation_metadata'] = {
+                'entities_count': len(entities),
+                'scenarios_count': len(scenarios),
+                'constraints_count': len(constraints),
+                'selected_type': diagram_type,
+                'conversation_phase': self.state.phase.value,
+                'domain': self.detected_domain
+            }
+            
+            return result
+            
+        except Exception as e:
+            print(f"❌ Visualization generation failed: {e}")
+            # Return minimal fallback diagram
+            return {
+                'id': 'fallback',
+                'title': 'System Overview',
+                'type': 'entity_relationship',
+                'nodes': [],
+                'edges': [],
+                'layout': {'type': 'force', 'spacing': 150, 'center_x': 400, 'center_y': 300},
+                'metadata': {'error': str(e), 'fallback': True}
+            }

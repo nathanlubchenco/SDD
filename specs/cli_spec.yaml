@@ -1,0 +1,37 @@
+scenarios:
+  - scenario: "Extracting and Preprocessing Session History"
+    given: "a user has completed several sessions using Codex CLI and Claude Code"
+    when: "the system accesses the ~/.codex and ~/.claude directories"
+    then:
+      - "it extracts all text-based logs"
+      - "preprocesses them for analysis by removing any user-identifiable information"
+      - "organizes the data for pattern recognition"
+
+  - scenario: "Recognizing Common Commands and Patterns"
+    given: "the preprocessed session history is available"
+    when: "the system analyzes the data"
+    then: "it identifies the most frequently used commands and any recurring patterns in the usage of Codex CLI and Claude Code"
+
+  - scenario: "Generating Improvement Suggestions"
+    given: "common commands and patterns have been identified"
+    when: "the system evaluates these against best practices for Codex CLI and Claude Code usage"
+    then:
+      - "it generates a list of suggested improvements or optimizations for the user's commands or usage patterns"
+
+  - scenario: "Reporting Findings to the User"
+    given: "a list of suggestions for improving Codex CLI and Claude Code usage"
+    when: "the user runs the report generation command"
+    then: "the system produces a human-readable report detailing the recognized patterns and suggesting improvements"
+
+  - scenario: "Automatically Updating Session Files with Suggestions (Optional)"
+    given: "the system has generated suggestions for improvement"
+    when: "the user approves the application of these suggestions"
+    then: "the system automatically updates the relevant session files or provides a template/command for the user to manually update their session history or future commands"
+
+  - scenario: "Handling Errors and Unreadable Files"
+    given: "there are files within the ~/.codex or ~/.claude directories that cannot be read or processed (due to corruption, access permissions, etc.)"
+    when: "the system attempts to extract and preprocess these files"
+    then:
+      - "it logs an error message detailing the issue"
+      - "skips the problematic files"
+      - "continues with the rest"

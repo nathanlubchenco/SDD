@@ -14,6 +14,7 @@ import uvicorn
 from conversation_engine import ConversationEngine
 from models import ConversationState, Message, Entity, Scenario, Constraint
 from scenario_builder import ScenarioBuilder
+from visualization_engine import VisualizationEngine
 
 # Initialize FastAPI app
 app = FastAPI(title="SDD Interactive Builder Backend", version="1.0.0")
@@ -167,6 +168,120 @@ async def get_scenario_templates():
         "domain_patterns": scenario_builder.domain_patterns
     }
 
+# Define visualization types endpoint FIRST (more specific route)
+@app.get("/api/visualization/types")
+async def get_visualization_types():
+    """Get available visualization types and their descriptions"""
+    return {
+        "types": {
+            "entity_relationship": {
+                "name": "Entity Relationship Diagram",
+                "description": "Shows entities and their relationships",
+                "best_for": "Understanding data models and business concepts",
+                "min_entities": 1
+            },
+            "scenario_flow": {
+                "name": "Scenario Flow Diagram", 
+                "description": "Shows Given/When/Then scenario flows",
+                "best_for": "Understanding user journeys and process flows",
+                "min_scenarios": 1
+            },
+            "architecture": {
+                "name": "System Architecture Diagram",
+                "description": "Shows system components and their interactions",
+                "best_for": "Understanding system structure and data flow",
+                "min_entities": 2,
+                "min_scenarios": 1
+            },
+            "network": {
+                "name": "Network Graph",
+                "description": "Shows all entities and relationships as a network",
+                "best_for": "Exploring complex interconnections",
+                "min_entities": 3
+            }
+        },
+        "auto_selection_rules": {
+            "scenarios >= 2": "scenario_flow",
+            "entities >= 3": "entity_relationship", 
+            "entities >= 1 AND scenarios >= 1": "architecture",
+            "default": "entity_relationship"
+        }
+    }
+
+class VisualizationRequest(BaseModel):
+    entities: List[Dict[str, Any]] = []
+    scenarios: List[Dict[str, Any]] = []
+    constraints: List[Dict[str, Any]] = []
+    diagram_type: str = "auto"
+
+@app.post("/api/visualization/generate")
+async def generate_custom_visualization(request: VisualizationRequest):
+    """Generate visualization from provided data"""
+    try:
+        visualization_engine = VisualizationEngine()
+        
+        # Determine diagram type
+        diagram_type = request.diagram_type
+        if diagram_type == "auto":
+            if len(request.scenarios) >= 2:
+                diagram_type = "scenario_flow"
+            elif len(request.entities) >= 3:
+                diagram_type = "entity_relationship"
+            elif len(request.entities) >= 1 and len(request.scenarios) >= 1:
+                diagram_type = "architecture"
+            else:
+                diagram_type = "entity_relationship"
+        
+        # Generate appropriate diagram
+        if diagram_type == "entity_relationship":
+            diagram = visualization_engine.generate_entity_relationship_diagram(request.entities)
+        elif diagram_type == "scenario_flow":
+            diagram = visualization_engine.generate_scenario_flow_diagram(request.scenarios, request.entities)
+        elif diagram_type == "architecture":
+            diagram = visualization_engine.generate_system_architecture_diagram(
+                request.entities, request.scenarios, request.constraints
+            )
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported diagram type: {diagram_type}")
+        
+        result = visualization_engine.to_dict(diagram)
+        stats = visualization_engine.get_diagram_statistics(diagram)
+        
+        return {
+            "diagram": result,
+            "statistics": stats,
+            "generated_at": datetime.now().isoformat(),
+            "input_summary": {
+                "entities": len(request.entities),
+                "scenarios": len(request.scenarios), 
+                "constraints": len(request.constraints),
+                "selected_type": diagram_type
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Custom visualization failed: {str(e)}")
+
+# Session-based visualization endpoint (more general route - define AFTER specific routes)
+@app.get("/api/visualization/{session_id}")
+async def get_visualization(session_id: str, diagram_type: str = "auto"):
+    """Generate visualization for current conversation state"""
+    if session_id not in conversation_sessions:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    try:
+        engine = conversation_sessions[session_id]
+        diagram = engine.generate_visualization(diagram_type)
+        
+        return {
+            "diagram": diagram,
+            "generated_at": datetime.now().isoformat(),
+            "session_id": session_id
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Visualization generation failed: {str(e)}")
+
 # Socket.IO event handlers
 @sio.event
 async def connect(sid, environ, auth):
@@ -233,6 +348,18 @@ async def message(sid, data):
         # Send updated conversation state
         if response.get('state_updated'):
             await sio.emit('conversation_state_update', engine.get_state(), room=sid)
+            
+            # Generate and send updated visualization
+            try:
+                visualization = engine.generate_visualization('auto')
+                await sio.emit('visualization_update', {
+                    'diagram': visualization,
+                    'timestamp': datetime.now().isoformat(),
+                    'trigger': 'state_update'
+                }, room=sid)
+                print(f"📊 Sent real-time visualization update to {sid}")
+            except Exception as e:
+                print(f"⚠️ Failed to generate visualization update: {e}")
         
         # Send suggested actions if available
         if response.get('suggested_actions'):
