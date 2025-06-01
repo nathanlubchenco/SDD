@@ -65,8 +65,12 @@ def chat_completion(messages, model="gpt-4o", temperature=0.0, max_tokens=None):
     
     # Handle o3 model parameter restrictions
     if model and "o3" in model:
-        # o3 model only supports default temperature (1) and no max_tokens
+        # o3 model has specific requirements: temperature=1, no max_tokens
         params["temperature"] = 1
+        # o3 may use max_completion_tokens instead of max_tokens
+        if max_tokens is not None:
+            params["max_completion_tokens"] = max_tokens
+        print(f"🧠 Using o3 model with special parameters: temperature=1, max_completion_tokens={max_tokens}")
     else:
         # Use provided temperature for other models
         params["temperature"] = temperature
@@ -79,7 +83,12 @@ def chat_completion(messages, model="gpt-4o", temperature=0.0, max_tokens=None):
         response = model_client.chat.completions.create(**params)
         return response.choices[0].message.content
     except Exception as e:
-        # Log timeout information for debugging
+        # Enhanced error logging for debugging model-specific issues
         if "timeout" in str(e).lower():
             print(f"⏱️  Timeout after {timeout_seconds}s for model {model}: {e}")
+        elif "o3" in model:
+            print(f"🚨 o3 model error: {e}")
+            print(f"🔧 o3 model parameters used: {params}")
+        else:
+            print(f"❌ Model {model} error: {e}")
         raise

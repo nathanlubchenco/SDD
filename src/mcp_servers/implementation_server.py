@@ -216,8 +216,10 @@ class ImplementationMCPServer(BaseMCPServer):
         """Generate initial implementation from scenarios and constraints."""
         
         if not self.ai_client:
-            self.logger.warning("AI client not available, using enhanced fallback")
-            return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
+            self.logger.error("AI client not available - specification-driven development requires AI model access")
+            raise RuntimeError("AI client not initialized. Specification-driven development requires a configured AI model. "
+                             "Please check your API keys (OPENAI_API_KEY or ANTHROPIC_API_KEY) and model configuration. "
+                             "The system cannot fall back to hardcoded templates as this violates the SDD principle that 'behavior is sacred'.")
 
         # Query API documentation to enhance implementation quality
         api_docs_context = await self._gather_api_documentation(target_framework, scenarios)
@@ -253,7 +255,15 @@ class ImplementationMCPServer(BaseMCPServer):
 
         except Exception as e:
             self.logger.error(f"AI implementation generation failed: {e}")
-            return await self._fallback_implementation_generation(scenarios, constraints, target_framework)
+            # For o3 and other reasoning models, provide more specific error context
+            error_context = f"Model: {getattr(self.ai_client, 'current_model', 'unknown')}, Error: {str(e)}"
+            self.logger.error(f"Specific failure context: {error_context}")
+            
+            # Raise exception instead of silent fallback for better debugging
+            raise RuntimeError(f"AI implementation generation failed for specification-driven development. "
+                             f"This indicates an issue with the AI model ({getattr(self.ai_client, 'current_model', 'unknown')}) "
+                             f"or configuration. Original error: {str(e)}. "
+                             f"Please check model configuration and try with a different model if issues persist.")
 
     async def _refine_implementation(self,
                                    current_implementation: Dict[str, Any],
